@@ -6,4 +6,4 @@ python ../libraries/run_mnist_training.py \
 			--batch_size 512 \
 			--seed 9033 \
 			--outfilename '../mnist_vae_results_aws/test' \
-			--subsample_data False 		
+			--subsample_data True 		

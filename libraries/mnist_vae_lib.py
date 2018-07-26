@@ -184,7 +184,7 @@ class HandwritingVAE(nn.Module):
             else:
                 image = data[0]
 
-            i+=1; print('batch {}'.format(i))
+            # i+=1; print('batch {}'.format(i))
 
             if optimizer is not None:
                 optimizer.zero_grad()
@@ -223,8 +223,8 @@ class HandwritingVAE(nn.Module):
         print('  * init test recon loss: {:.10g};'.format(test_loss))
 
         iter_array.append(0)
-        train_loss_array.append(train_loss.detach().numpy())
-        test_loss_array.append(test_loss.detach().numpy())
+        train_loss_array.append(train_loss.detach().cpu().numpy())
+        test_loss_array.append(test_loss.detach().cpu().numpy())
 
         for epoch in range(1, n_epoch + 1):
             start_time = timeit.default_timer()
@@ -244,8 +244,8 @@ class HandwritingVAE(nn.Module):
                 print('  * test recon loss: {:.10g};'.format(test_loss))
 
                 iter_array.append(epoch)
-                train_loss_array.append(train_loss.detach().numpy())
-                test_loss_array.append(test_loss.detach().numpy())
+                train_loss_array.append(train_loss.detach().cpu().numpy())
+                test_loss_array.append(test_loss.detach().cpu().numpy())
 
             if epoch % save_every == 0:
                 outfile_every = outfile + '_epoch' + str(epoch)
