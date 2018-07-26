@@ -31,31 +31,31 @@ class MLPEncoder(nn.Module):
         self.fc2 = nn.Linear(500, self.n_pixels)
         self.fc3 = nn.Linear(self.n_pixels, (n_classes - 1) + latent_dim * 2)
 
-
-
     def forward(self, image):
 
         # feed through neural network
-        z = image.view(-1, self.n_pixels)
+        h = image.view(-1, self.n_pixels)
 
-        z = F.relu(self.fc1(z))
-        z = F.relu(self.fc2(z))
-        z = self.fc3(z)
+        h = F.relu(self.fc1(h))
+        h = F.relu(self.fc2(h))
+        h = self.fc3(h)
 
         # get means, std, and class weights
         indx1 = self.latent_dim
         indx2 = 2 * self.latent_dim
-        indx3 = 2 * self.latent_dim + self.n_classes
+        # ndx3 = 2 * self.latent_dim + self.n_classes
 
-        latent_means = z[:, 0:indx1]
-        latent_std = torch.exp(z[:, indx1:indx2])
-        free_class_weights = z[:, indx2:indx3]
+        latent_means = h[:, 0:indx1]
+        latent_std = torch.exp(h[:, indx1:indx2])
+        free_class_weights = h[:, indx2:]
+        class_weights = common_utils.get_symplex_from_reals(free_class_weights)
 
-        return latent_means, latent_std, free_class_weights
+        return latent_means, latent_std, class_weights
 
 
 class MLPConditionalDecoder(nn.Module):
     def __init__(self, latent_dim = 5,
+                        n_classes = 10,
                         slen = 28):
 
         # This takes the latent parameters and returns the
@@ -66,31 +66,36 @@ class MLPConditionalDecoder(nn.Module):
         # image/model parameters
         self.n_pixels = slen ** 2
         self.latent_dim = latent_dim
+        self.n_classes = n_classes
         self.slen = slen
 
-        self.fc1 = nn.Linear(latent_dim, self.n_pixels)
+        self.fc1 = nn.Linear(latent_dim + n_classes, self.n_pixels)
         self.fc2 = nn.Linear(self.n_pixels, 500)
         self.fc3 = nn.Linear(500, self.n_pixels * 2)
 
 
-    def forward(self, latent_params):
-        latent_params = latent_params.view(-1, self.latent_dim)
+    def forward(self, latent_params, z):
+        assert latent_params.shape[1] == self.latent_dim
+        assert z.shape[1] == self.n_classes # z should be one hot encoded
+        assert latent_params.shape[0] == z.shape[0]
 
-        z = F.relu(self.fc1(latent_params))
-        z = F.relu(self.fc2(z))
-        z = self.fc3(z)
+        h = torch.cat((latent_params, z), dim = 1)
 
-        z = z.view(-1, 2, self.slen, self.slen)
+        h = F.relu(self.fc1(h))
+        h = F.relu(self.fc2(h))
+        h = self.fc3(h)
 
-        image_mean = z[:, 0, :, :]
-        image_std = torch.exp(z[:, 1, :, :])
+        h = h.view(-1, 2, self.slen, self.slen)
+
+        image_mean = h[:, 0, :, :]
+        image_std = torch.exp(h[:, 1, :, :])
 
         return image_mean, image_std
 
 class HandwritingVAE(nn.Module):
 
     def __init__(self, latent_dim = 5,
-                    n_classes = 9,
+                    n_classes = 10,
                     slen = 28):
 
         super(HandwritingVAE, self).__init__()
@@ -99,25 +104,25 @@ class HandwritingVAE(nn.Module):
                                     n_classes = n_classes,
                                     slen = slen)
 
-        # one decoder for each classes
-        self.decoder_list = [
-            MLPConditionalDecoder(latent_dim = latent_dim, slen = slen) for
-            k in range(n_classes)
-        ]
+        self.decoder = MLPConditionalDecoder(latent_dim = latent_dim,
+                                                n_classes = n_classes,
+                                                slen = slen)
 
     def encoder_forward(self, image):
-        latent_means, latent_std, free_class_weights = self.encoder(image)
-
-        class_weights = common_utils.get_symplex_from_reals(free_class_weights)
+        latent_means, latent_std, class_weights = self.encoder(image)
 
         latent_samples = torch.randn(latent_means.shape) * latent_std + latent_means
 
         return latent_means, latent_std, latent_samples, class_weights
 
     def decoder_forward(self, latent_samples, z):
-        assert z <= len(self.decoder_list)
+        # z should be a vector of integers of length batch_size
+        assert len(z) == latent_samples.shape[0]
 
-        image_mean, image_std = self.decoder_list[z](latent_samples)
+        one_hot_z = \
+            common_utils.get_one_hot_encoding_from_int(z, self.encoder.n_classes)
+
+        image_mean, image_std = self.decoder(latent_samples, one_hot_z)
 
         return image_mean, image_std
 
@@ -129,23 +134,30 @@ class HandwritingVAE(nn.Module):
         # likelihood term
         loss = 0.0
         for z in range(self.encoder.n_classes):
-            image_mu, image_std = self.decoder_forward(latent_samples, z)
+            batch_z = torch.ones(image.shape[0]) * z
+            image_mu, image_std = self.decoder_forward(latent_samples, batch_z)
 
             normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
                                                     image_std, scale = False)
+            if not(np.all(np.isfinite(normal_loglik_z.detach().numpy()))):
+                print(z)
+                print(image_std)
+                assert np.all(np.isfinite(normal_loglik_z.detach().numpy()))
 
             loss = - (class_weights[:, z] * normal_loglik_z).sum()
 
         # kl term for latent parameters
         # (assuming standard normal prior)
         kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
-                                                            latent_std).sum()
+                                                            latent_std)
+        assert np.isfinite(kl_q_latent.detach().numpy())
 
         # entropy term for class weights
         # (assuming uniform prior)
-        kl_q_z = common_utils.get_multinomial_entropy(class_weights).sum()
+        kl_q_z = -common_utils.get_multinomial_entropy(class_weights)
+        assert np.isfinite(kl_q_z.detach().numpy())
 
-        loss -= (kl_q_latent + kl_q_z)
+        loss += (kl_q_latent + kl_q_z)
 
         return loss / image.size()[0]
 
@@ -169,14 +181,13 @@ class HandwritingVAE(nn.Module):
 
             batch_size = image.size()[0]
 
-            loss = self.loss(image)
+            loss = self.loss(image)  * (batch_size / num_images)
 
-            # do we need to scale this for the gradient to be unbiased?
             if train:
                 loss.backward()
                 optimizer.step()
 
-            avg_loss += loss.data * (batch_size / num_images)
+            avg_loss += loss.data
 
         return avg_loss
 
@@ -192,10 +203,18 @@ class HandwritingVAE(nn.Module):
         optimizer = optim.Adam(self.parameters(), lr=lr,
                                 weight_decay=weight_decay)
 
+        iter_array = []
+        train_loss_array = []
+        test_loss_array = []
+
         train_loss = self.eval_vae(train_loader)
         test_loss = self.eval_vae(test_loader)
         print('  * init train recon loss: {:.10g};'.format(train_loss))
         print('  * init test recon loss: {:.10g};'.format(test_loss))
+
+        iter_array.append(0)
+        train_loss_array.append(train_loss.detach().numpy())
+        test_loss_array.append(test_loss.detach().numpy())
 
         for epoch in range(1, n_epoch + 1):
             start_time = timeit.default_timer()
@@ -214,6 +233,10 @@ class HandwritingVAE(nn.Module):
                 print('  * train recon loss: {:.10g};'.format(train_loss))
                 print('  * test recon loss: {:.10g};'.format(test_loss))
 
+                iter_array.append(epoch)
+                train_loss_array.append(train_loss.detach().numpy())
+                test_loss_array.append(test_loss.detach().numpy())
+
             if epoch % save_every == 0:
                 outfile_every = outfile + '_epoch' + str(epoch)
                 print("writing the encoder parameters to " + outfile_every + '\n')
@@ -223,3 +246,9 @@ class HandwritingVAE(nn.Module):
             outfile_final = outfile + '_final'
             print("writing the encoder parameters to " + outfile_final + '\n')
             torch.save(self.lensing_vae.enc.state_dict(), outfile_final)
+
+            loss_array = np.array((3, len(iter_array)))
+            loss_array[0, :] = iter_array
+            loss_array[1, :] = train_loss_array
+            loss_array[2, :] = test_loss_array
+            np.savetxt(outfile + 'loss_array.txt', loss_array)
