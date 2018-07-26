@@ -13,6 +13,8 @@ import common_utils
 
 import timeit
 
+dtype = torch.cuda.float if torch.cuda.is_available() else torch.float
+
 class MLPEncoder(nn.Module):
     def __init__(self, latent_dim = 5,
                     n_classes = 10,
@@ -113,7 +115,7 @@ class HandwritingVAE(nn.Module):
     def encoder_forward(self, image):
         latent_means, latent_std, class_weights = self.encoder(image)
 
-        latent_samples = torch.randn(latent_means.shape).cuda() * latent_std + latent_means
+        latent_samples = torch.randn(latent_means.shape, dtype = dtype) * latent_std + latent_means
 
         return latent_means, latent_std, latent_samples, class_weights
 
@@ -122,7 +124,7 @@ class HandwritingVAE(nn.Module):
         assert len(z) == latent_samples.shape[0]
 
         one_hot_z = \
-            common_utils.get_one_hot_encoding_from_int(z, self.encoder.n_classes).cuda()
+            common_utils.get_one_hot_encoding_from_int(z, self.encoder.n_classes)
 
         image_mean, image_std = self.decoder(latent_samples, one_hot_z)
 
@@ -136,8 +138,8 @@ class HandwritingVAE(nn.Module):
         # likelihood term
         loss = 0.0
         for z in range(self.encoder.n_classes):
-            batch_z = torch.ones(image.shape[0]) * z
-            image_mu, image_std = self.decoder_forward(latent_samples.cuda(), batch_z.cuda())
+            batch_z = torch.ones(image.shape[0], dtype = dtype) * z
+            image_mu, image_std = self.decoder_forward(latent_samples, batch_z)
 
             normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
                                                     image_std, scale = False)
@@ -172,11 +174,18 @@ class HandwritingVAE(nn.Module):
 
         avg_loss = 0.0
 
-        num_images = train_loader.dataset.__len__(); i = 0; 
+        num_images = train_loader.dataset.__len__()
+        i = 0
 
         for batch_idx, data in enumerate(train_loader):
-            image = data[0].cuda(); i+=1; print('batch {}'.format(i))  # first entry in the tuple is the actual image
+            # first entry of data is the actual image
             # the second entry is the true class label
+            if torch.cuda.is_available():
+                image = data[0].cuda()
+            else:
+                image = data[0]
+
+            i+=1; print('batch {}'.format(i))
 
             if optimizer is not None:
                 optimizer.zero_grad()
