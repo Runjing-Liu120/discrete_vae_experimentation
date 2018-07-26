@@ -17,9 +17,9 @@ def load_mnist_data(data_dir = '../mnist_data/'):
                                 transforms.Normalize((0.5,), (1.0,))])
 
     train_set = dset.MNIST(root=data_dir, train=True,
-                            transform=trans, download=False)
+                            transform=trans, download=True)
     test_set = dset.MNIST(root=data_dir, train=False,
-                            transform=trans, download=False)
+                            transform=trans, download=True)
 
     return train_set, test_set
 
