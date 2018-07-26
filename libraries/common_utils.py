@@ -37,7 +37,7 @@ def get_symplex_from_reals(unconstrained_mat):
 
     # first column is reference value
     aug_unconstrained_mat = torch.cat([
-                            torch.zeros((unconstrained_mat.shape[0], 1)),
+                            torch.zeros((unconstrained_mat.shape[0], 1)).cuda(),
                             unconstrained_mat], 1)
 
     return softmax(aug_unconstrained_mat)

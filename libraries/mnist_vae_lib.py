@@ -113,7 +113,7 @@ class HandwritingVAE(nn.Module):
     def encoder_forward(self, image):
         latent_means, latent_std, class_weights = self.encoder(image)
 
-        latent_samples = torch.randn(latent_means.shape) * latent_std + latent_means
+        latent_samples = torch.randn(latent_means.shape).cuda() * latent_std + latent_means
 
         return latent_means, latent_std, latent_samples, class_weights
 
@@ -122,7 +122,7 @@ class HandwritingVAE(nn.Module):
         assert len(z) == latent_samples.shape[0]
 
         one_hot_z = \
-            common_utils.get_one_hot_encoding_from_int(z, self.encoder.n_classes)
+            common_utils.get_one_hot_encoding_from_int(z, self.encoder.n_classes).cuda()
 
         image_mean, image_std = self.decoder(latent_samples, one_hot_z)
 
@@ -137,14 +137,14 @@ class HandwritingVAE(nn.Module):
         loss = 0.0
         for z in range(self.encoder.n_classes):
             batch_z = torch.ones(image.shape[0]) * z
-            image_mu, image_std = self.decoder_forward(latent_samples, batch_z)
+            image_mu, image_std = self.decoder_forward(latent_samples.cuda(), batch_z.cuda())
 
             normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
                                                     image_std, scale = False)
-            if not(np.all(np.isfinite(normal_loglik_z.detach().numpy()))):
+            if not(np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))):
                 print(z)
                 print(image_std)
-                assert np.all(np.isfinite(normal_loglik_z.detach().numpy()))
+                assert np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))
 
             loss = - (class_weights[:, z] * normal_loglik_z).sum()
 
@@ -152,12 +152,12 @@ class HandwritingVAE(nn.Module):
         # (assuming standard normal prior)
         kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
                                                             latent_std)
-        assert np.isfinite(kl_q_latent.detach().numpy())
+        assert np.isfinite(kl_q_latent.detach().cpu().numpy())
 
         # entropy term for class weights
         # (assuming uniform prior)
         kl_q_z = -common_utils.get_multinomial_entropy(class_weights)
-        assert np.isfinite(kl_q_z.detach().numpy())
+        assert np.isfinite(kl_q_z.detach().cpu().numpy())
 
         loss += (kl_q_latent + kl_q_z)
 
@@ -172,10 +172,10 @@ class HandwritingVAE(nn.Module):
 
         avg_loss = 0.0
 
-        num_images = train_loader.dataset.__len__()
+        num_images = train_loader.dataset.__len__(); i = 0; 
 
         for batch_idx, data in enumerate(train_loader):
-            image = data[0] # first entry in the tuple is the actual image
+            image = data[0].cuda(); i+=1; print('batch {}'.format(i))  # first entry in the tuple is the actual image
             # the second entry is the true class label
 
             if optimizer is not None:
