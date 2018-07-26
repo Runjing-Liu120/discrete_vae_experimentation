@@ -248,9 +248,14 @@ class HandwritingVAE(nn.Module):
                 test_loss_array.append(test_loss.detach().cpu().numpy())
 
             if epoch % save_every == 0:
-                outfile_every = outfile + '_epoch' + str(epoch)
+                outfile_every = outfile + '_enc_epoch' + str(epoch)
                 print("writing the encoder parameters to " + outfile_every + '\n')
-                torch.save(self.parameters(), outfile_every)
+                torch.save(self.encoder.state_dict(), outfile_final)
+
+                outfile_every = outfile + '_dec_epoch' + str(epoch)
+                print("writing the decoder parameters to " + outfile_every + '\n')
+                torch.save(self.decoder.state_dict(), outfile_final)
+
 
         if save_final_enc:
             outfile_final = outfile + '_enc_final'
