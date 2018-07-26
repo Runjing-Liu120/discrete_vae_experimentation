@@ -2,7 +2,7 @@ import torch
 
 from torch.distributions import Normal
 
-dtype = torch.cuda.float if torch.cuda.is_available() else torch.float
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 ############################
 # Some terms for the ELBO
@@ -39,7 +39,7 @@ def get_symplex_from_reals(unconstrained_mat):
 
     # first column is reference value
     aug_unconstrained_mat = torch.cat([
-                            torch.zeros((unconstrained_mat.shape[0], 1), dtype = dtype),
+                            torch.zeros((unconstrained_mat.shape[0], 1)).to(device),
                             unconstrained_mat], 1)
 
     return softmax(aug_unconstrained_mat)
@@ -53,7 +53,7 @@ def get_one_hot_encoding_from_int(z, n_classes):
     assert (torch.max(z) + 1) <= n_classes
 
     batch_size = len(z)
-    one_hot_z = torch.zeros((batch_size, n_classes), dtype = dtype)
+    one_hot_z = torch.zeros((batch_size, n_classes)).to(device)
 
     for i in range(n_classes):
         one_hot_z[z == i, i] = 1.

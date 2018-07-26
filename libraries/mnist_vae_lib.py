@@ -10,10 +10,9 @@ from torch.distributions import Normal
 import torch.nn.functional as F
 
 import common_utils
-
 import timeit
 
-dtype = torch.cuda.float if torch.cuda.is_available() else torch.float
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class MLPEncoder(nn.Module):
     def __init__(self, latent_dim = 5,
@@ -115,7 +114,7 @@ class HandwritingVAE(nn.Module):
     def encoder_forward(self, image):
         latent_means, latent_std, class_weights = self.encoder(image)
 
-        latent_samples = torch.randn(latent_means.shape, dtype = dtype) * latent_std + latent_means
+        latent_samples = torch.randn(latent_means.shape).to(device) * latent_std + latent_means
 
         return latent_means, latent_std, latent_samples, class_weights
 
@@ -138,7 +137,7 @@ class HandwritingVAE(nn.Module):
         # likelihood term
         loss = 0.0
         for z in range(self.encoder.n_classes):
-            batch_z = torch.ones(image.shape[0], dtype = dtype) * z
+            batch_z = torch.ones(image.shape[0]).to(device) * z
             image_mu, image_std = self.decoder_forward(latent_samples, batch_z)
 
             normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
@@ -181,7 +180,7 @@ class HandwritingVAE(nn.Module):
             # first entry of data is the actual image
             # the second entry is the true class label
             if torch.cuda.is_available():
-                image = data[0].cuda()
+                image = data[0].to(device)
             else:
                 image = data[0]
 
