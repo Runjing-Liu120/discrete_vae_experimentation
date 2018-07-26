@@ -11,6 +11,8 @@ import torch.nn.functional as F
 
 import common_utils
 
+import timeit
+
 class MLPEncoder(nn.Module):
     def __init__(self, latent_dim = 5,
                     n_classes = 10,
@@ -195,7 +197,7 @@ class HandwritingVAE(nn.Module):
                     set_true_lens_params = False,
                     set_true_lens_on = False,
                     set_true_source = False,
-                    outfile = './enc',
+                    outfile = './mnist_vae',
                     n_epoch = 200, print_every = 10, save_every = 20,
                     weight_decay = 1e-6, lr = 0.001,
                     save_final_enc = True):
@@ -224,7 +226,7 @@ class HandwritingVAE(nn.Module):
                                         train = True)
 
             elapsed = timeit.default_timer() - start_time
-            print('[{}] loss: {:.0f}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
+            print('[{}] loss: {:.10g}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
 
             if epoch % print_every == 0:
                 train_loss = self.eval_vae(train_loader)
@@ -243,11 +245,15 @@ class HandwritingVAE(nn.Module):
                 torch.save(self.parameters(), outfile_every)
 
         if save_final_enc:
-            outfile_final = outfile + '_final'
+            outfile_final = outfile + '_enc_final'
             print("writing the encoder parameters to " + outfile_final + '\n')
-            torch.save(self.lensing_vae.enc.state_dict(), outfile_final)
+            torch.save(self.encoder.state_dict(), outfile_final)
 
-            loss_array = np.array((3, len(iter_array)))
+            outfile_final = outfile + '_dec_final'
+            print("writing the decoder parameters to " + outfile_final + '\n')
+            torch.save(self.decoder.state_dict(), outfile_final)
+
+            loss_array = np.zeros((3, len(iter_array)))
             loss_array[0, :] = iter_array
             loss_array[1, :] = train_loss_array
             loss_array[2, :] = test_loss_array

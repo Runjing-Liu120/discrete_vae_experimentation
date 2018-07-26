@@ -7,7 +7,7 @@ from torch.distributions import Normal
 #############################
 def get_normal_loglik(x, mean, std, scale = False):
     recon_losses = \
-        Normal(mean, std + 1e-12).log_prob(x)
+        Normal(mean, std + 1e-8).log_prob(x)
 
     if scale:
         factor = torch.prod(torch.Tensor([x.size()])) / x.size()[0]
@@ -22,11 +22,11 @@ softmax = torch.nn.Softmax(dim=1)
 def get_kl_q_standard_normal(mu, sigma):
     # The KL between a Gaussian variational distribution
     # and a standard normal
-    return 0.5 * torch.sum(-1 - torch.log(sigma**2 + 1e-12) + \
+    return 0.5 * torch.sum(-1 - torch.log(sigma**2 + 1e-8) + \
                                 mu**2 + sigma**2)
 
 def get_multinomial_entropy(z):
-    return (- z * torch.log(z + 1e-12)).sum()
+    return (- z * torch.log(z + 1e-8)).sum()
 
 ############################
 # Other miscillaneous utils
