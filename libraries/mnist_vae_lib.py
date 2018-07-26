@@ -129,6 +129,12 @@ class HandwritingVAE(nn.Module):
 
         return image_mean, image_std
 
+    def forward(self, image):
+        # Note this forward module is not differentiable
+        # bc we sample a discrete class
+        assert 1 == 2, 'not implemented yet '
+
+
     def loss(self, image):
 
         latent_means, latent_std, latent_samples, class_weights = \
