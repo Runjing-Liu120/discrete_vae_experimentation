@@ -118,7 +118,7 @@ n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
                             n_classes = n_classes,
                             slen = slen)
-
+vae.cuda()
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)
 

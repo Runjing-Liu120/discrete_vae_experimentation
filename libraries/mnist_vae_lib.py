@@ -10,8 +10,9 @@ from torch.distributions import Normal
 import torch.nn.functional as F
 
 import common_utils
-
 import timeit
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class MLPEncoder(nn.Module):
     def __init__(self, latent_dim = 5,
@@ -113,7 +114,7 @@ class HandwritingVAE(nn.Module):
     def encoder_forward(self, image):
         latent_means, latent_std, class_weights = self.encoder(image)
 
-        latent_samples = torch.randn(latent_means.shape) * latent_std + latent_means
+        latent_samples = torch.randn(latent_means.shape).to(device) * latent_std + latent_means
 
         return latent_means, latent_std, latent_samples, class_weights
 
@@ -128,6 +129,12 @@ class HandwritingVAE(nn.Module):
 
         return image_mean, image_std
 
+    def forward(self, image):
+        # Note this forward module is not differentiable
+        # bc we sample a discrete class
+        assert 1 == 2, 'not implemented yet '
+
+
     def loss(self, image):
 
         latent_means, latent_std, latent_samples, class_weights = \
@@ -136,15 +143,15 @@ class HandwritingVAE(nn.Module):
         # likelihood term
         loss = 0.0
         for z in range(self.encoder.n_classes):
-            batch_z = torch.ones(image.shape[0]) * z
+            batch_z = torch.ones(image.shape[0]).to(device) * z
             image_mu, image_std = self.decoder_forward(latent_samples, batch_z)
 
             normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
                                                     image_std, scale = False)
-            if not(np.all(np.isfinite(normal_loglik_z.detach().numpy()))):
+            if not(np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))):
                 print(z)
                 print(image_std)
-                assert np.all(np.isfinite(normal_loglik_z.detach().numpy()))
+                assert np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))
 
             loss = - (class_weights[:, z] * normal_loglik_z).sum()
 
@@ -152,12 +159,12 @@ class HandwritingVAE(nn.Module):
         # (assuming standard normal prior)
         kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
                                                             latent_std)
-        assert np.isfinite(kl_q_latent.detach().numpy())
+        assert np.isfinite(kl_q_latent.detach().cpu().numpy())
 
         # entropy term for class weights
         # (assuming uniform prior)
         kl_q_z = -common_utils.get_multinomial_entropy(class_weights)
-        assert np.isfinite(kl_q_z.detach().numpy())
+        assert np.isfinite(kl_q_z.detach().cpu().numpy())
 
         loss += (kl_q_latent + kl_q_z)
 
@@ -173,10 +180,17 @@ class HandwritingVAE(nn.Module):
         avg_loss = 0.0
 
         num_images = train_loader.dataset.__len__()
+        i = 0
 
         for batch_idx, data in enumerate(train_loader):
-            image = data[0] # first entry in the tuple is the actual image
+            # first entry of data is the actual image
             # the second entry is the true class label
+            if torch.cuda.is_available():
+                image = data[0].to(device)
+            else:
+                image = data[0]
+
+            # i+=1; print('batch {}'.format(i))
 
             if optimizer is not None:
                 optimizer.zero_grad()
@@ -215,8 +229,8 @@ class HandwritingVAE(nn.Module):
         print('  * init test recon loss: {:.10g};'.format(test_loss))
 
         iter_array.append(0)
-        train_loss_array.append(train_loss.detach().numpy())
-        test_loss_array.append(test_loss.detach().numpy())
+        train_loss_array.append(train_loss.detach().cpu().numpy())
+        test_loss_array.append(test_loss.detach().cpu().numpy())
 
         for epoch in range(1, n_epoch + 1):
             start_time = timeit.default_timer()
@@ -236,13 +250,18 @@ class HandwritingVAE(nn.Module):
                 print('  * test recon loss: {:.10g};'.format(test_loss))
 
                 iter_array.append(epoch)
-                train_loss_array.append(train_loss.detach().numpy())
-                test_loss_array.append(test_loss.detach().numpy())
+                train_loss_array.append(train_loss.detach().cpu().numpy())
+                test_loss_array.append(test_loss.detach().cpu().numpy())
 
             if epoch % save_every == 0:
-                outfile_every = outfile + '_epoch' + str(epoch)
+                outfile_every = outfile + '_enc_epoch' + str(epoch)
                 print("writing the encoder parameters to " + outfile_every + '\n')
-                torch.save(self.parameters(), outfile_every)
+                torch.save(self.encoder.state_dict(), outfile_every)
+
+                outfile_every = outfile + '_dec_epoch' + str(epoch)
+                print("writing the decoder parameters to " + outfile_every + '\n')
+                torch.save(self.decoder.state_dict(), outfile_every)
+
 
         if save_final_enc:
             outfile_final = outfile + '_enc_final'
