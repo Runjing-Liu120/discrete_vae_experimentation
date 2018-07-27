@@ -153,17 +153,21 @@ class HandwritingVAE(nn.Module):
                 print(image_std)
                 assert np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))
 
-            loss = - (class_weights[:, z] * normal_loglik_z).sum()
+            loss -= (class_weights[:, z] * normal_loglik_z).sum()
 
+            print('log like', loss / image.size()[0])
         # kl term for latent parameters
         # (assuming standard normal prior)
         kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
                                                             latent_std)
         assert np.isfinite(kl_q_latent.detach().cpu().numpy())
 
+        print('kl q latent', kl_q_latent / image.size()[0])
+
         # entropy term for class weights
         # (assuming uniform prior)
         kl_q_z = -common_utils.get_multinomial_entropy(class_weights)
+        print('kl q z', kl_q_z / image.size()[0])
         assert np.isfinite(kl_q_z.detach().cpu().numpy())
 
         loss += (kl_q_latent + kl_q_z)
