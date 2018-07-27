@@ -260,11 +260,11 @@ class HandwritingVAE(nn.Module):
             if epoch % save_every == 0:
                 outfile_every = outfile + '_enc_epoch' + str(epoch)
                 print("writing the encoder parameters to " + outfile_every + '\n')
-                torch.save(self.encoder.state_dict(), outfile_final)
+                torch.save(self.encoder.state_dict(), outfile_every)
 
                 outfile_every = outfile + '_dec_epoch' + str(epoch)
                 print("writing the decoder parameters to " + outfile_every + '\n')
-                torch.save(self.decoder.state_dict(), outfile_final)
+                torch.save(self.decoder.state_dict(), outfile_every)
 
 
         if save_final_enc:
