@@ -135,10 +135,18 @@ class HandwritingVAE(nn.Module):
         assert 1 == 2, 'not implemented yet '
 
 
-    def loss(self, image):
+    def loss(self, image, true_class_labels = None):
 
         latent_means, latent_std, latent_samples, class_weights = \
             self.encoder_forward(image)
+
+        if true_class_labels is not None:
+            print('setting true class label')
+            true_class_weights_np = np.zeros(class_weights.shape)
+            true_class_weights_np[np.arange(class_weights.shape[0]),
+                            true_class_labels] = 1
+
+            class_weights = torch.Tensor(true_class_weights_np).to(device)
 
         # likelihood term
         loss = 0.0
@@ -148,6 +156,7 @@ class HandwritingVAE(nn.Module):
 
             normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
                                                     image_std, scale = False)
+
             if not(np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))):
                 print(z)
                 print(image_std)
@@ -166,15 +175,19 @@ class HandwritingVAE(nn.Module):
 
         # entropy term for class weights
         # (assuming uniform prior)
-        kl_q_z = -common_utils.get_multinomial_entropy(class_weights)
-        # print('kl q z', kl_q_z / image.size()[0])
-        assert np.isfinite(kl_q_z.detach().cpu().numpy())
+        if true_class_labels is not None:
+            kl_q_z = 0.0
+        else:
+            kl_q_z = -common_utils.get_multinomial_entropy(class_weights)
+            # print('kl q z', kl_q_z / image.size()[0])
+            assert np.isfinite(kl_q_z.detach().cpu().numpy())
 
         loss += (kl_q_latent + kl_q_z)
 
         return loss / image.size()[0]
 
-    def eval_vae(self, train_loader, optimizer = None, train = False):
+    def eval_vae(self, train_loader, optimizer = None, train = False,
+                    set_true_class_label = False):
         if train:
             self.train()
             assert optimizer is not None
@@ -201,7 +214,13 @@ class HandwritingVAE(nn.Module):
 
             batch_size = image.size()[0]
 
-            loss = self.loss(image)  * (batch_size / num_images)
+            if set_true_class_label:
+                true_class_labels = data[1].numpy()
+            else:
+                true_class_labels = None
+
+            loss = self.loss(image, true_class_labels)  * \
+                            (batch_size / num_images)
 
             if train:
                 loss.backward()
@@ -212,9 +231,7 @@ class HandwritingVAE(nn.Module):
         return avg_loss
 
     def train_module(self, train_loader, test_loader,
-                    set_true_lens_params = False,
-                    set_true_lens_on = False,
-                    set_true_source = False,
+                    set_true_class_label = False,
                     outfile = './mnist_vae',
                     n_epoch = 200, print_every = 10, save_every = 20,
                     weight_decay = 1e-6, lr = 0.001,
@@ -227,8 +244,8 @@ class HandwritingVAE(nn.Module):
         train_loss_array = []
         test_loss_array = []
 
-        train_loss = self.eval_vae(train_loader)
-        test_loss = self.eval_vae(test_loader)
+        train_loss = self.eval_vae(train_loader, set_true_class_label = set_true_class_label)
+        test_loss = self.eval_vae(test_loader, set_true_class_label = set_true_class_label)
         print('  * init train recon loss: {:.10g};'.format(train_loss))
         print('  * init test recon loss: {:.10g};'.format(test_loss))
 
@@ -241,14 +258,15 @@ class HandwritingVAE(nn.Module):
 
             batch_loss = self.eval_vae(train_loader,
                                         optimizer = optimizer,
-                                        train = True)
+                                        train = True,
+                                        set_true_class_label = set_true_class_label)
 
             elapsed = timeit.default_timer() - start_time
             print('[{}] loss: {:.10g}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
 
             if epoch % print_every == 0:
-                train_loss = self.eval_vae(train_loader)
-                test_loss = self.eval_vae(test_loader)
+                train_loss = self.eval_vae(train_loader, set_true_class_label = set_true_class_label)
+                test_loss = self.eval_vae(test_loader, set_true_class_label = set_true_class_label)
 
                 print('  * train recon loss: {:.10g};'.format(train_loss))
                 print('  * test recon loss: {:.10g};'.format(test_loss))

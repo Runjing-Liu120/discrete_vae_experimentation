@@ -24,6 +24,9 @@ parser.add_argument('--mnist_data_dir', type = str,
                     default='../mnist_data/')
 parser.add_argument('--latent_dim', type=int, default=5, metavar='N',
                     help='laten dimension (default = 5)')
+parser.add_argument('--set_true_class_label', type=distutils.util.strtobool, default='False',
+                    help='whether to set the class label ')
+
 
 # Training parameters
 parser.add_argument('--epochs', type=int, default=1000,
@@ -140,6 +143,7 @@ vae.train_module(train_loader, test_loader,
                     outfile = outfile,
                     save_every = args.save_every,
                     weight_decay = args.weight_decay,
-                    lr = args.learning_rate)
+                    lr = args.learning_rate,
+                    set_true_class_label = set_true_class_label)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))
