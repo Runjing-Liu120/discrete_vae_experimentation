@@ -203,9 +203,9 @@ class HandwritingVAE(nn.Module):
             # first entry of data is the actual image
             # the second entry is the true class label
             if torch.cuda.is_available():
-                image = data[0].to(device)
+                image = data['image'].to(device)
             else:
-                image = data[0]
+                image = data['image']
 
             # i+=1; print('batch {}'.format(i))
 
@@ -215,7 +215,7 @@ class HandwritingVAE(nn.Module):
             batch_size = image.size()[0]
 
             if set_true_class_label:
-                true_class_labels = data[1].numpy()
+                true_class_labels = data['label'].numpy()
             else:
                 true_class_labels = None
 

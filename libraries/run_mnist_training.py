@@ -58,11 +58,9 @@ parser.add_argument('--dec_init', type = str,
                     help = 'file from which to load encoder')
 
 # Whether to just work with subset of data
-parser.add_argument('--subsample_data', type=distutils.util.strtobool, default='False',
-                    help='whether to only use a subset of data')
 parser.add_argument('--propn_sample', type = float,
                     help='proportion of dataset to use',
-                    default = 0.001)
+                    default = 1.0)
 
 # Other params
 parser.add_argument('--seed', type=int, default=4254,
@@ -86,36 +84,23 @@ _ = torch.manual_seed(args.seed)
 
 # LOAD DATA
 print('Loading data')
-train_set, test_set = mnist_data_lib.load_mnist_data(data_dir = args.mnist_data_dir)
-
+# train_set, test_set = mnist_data_lib.load_mnist_data(data_dir = args.mnist_data_dir)
+train_set, test_set = mnist_data_lib.get_mnist_dataset(data_dir = args.mnist_data_dir,
+                                                        propn_sample=args.propn_sample)
 
 batch_size = args.batch_size
-if args.subsample_data:
-    print('subsampling to {} percent of the data'.format(args.propn_sample * 100))
+train_loader = DataLoader(
+                 dataset=train_set,
+                 batch_size=args.batch_size,
+                 shuffle=True)
 
-    train_loader = mnist_data_lib.subsample_mnist_data(batch_size=args.batch_size,
-                                                data_set=train_set,
-                                                propn_sample=args.propn_sample)
-
-    test_loader = mnist_data_lib.subsample_mnist_data(batch_size=args.batch_size,
-                                                data_set=test_set,
-                                                propn_sample=args.propn_sample)
-else:
-    train_loader = DataLoader(
-                     dataset=train_set,
-                     batch_size=args.batch_size,
-                     shuffle=True)
-
-    test_loader = DataLoader(
-                    dataset=test_set,
-                    batch_size=args.batch_size,
-                    shuffle=False)
-
-
-
+test_loader = DataLoader(
+                dataset=test_set,
+                batch_size=args.batch_size,
+                shuffle=False)
 
 # SET UP VAE
-slen = slen = train_set.train_data[0].shape[0]
+slen = train_set[0]['image'].shape[-1]
 latent_dim = args.latent_dim
 n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
