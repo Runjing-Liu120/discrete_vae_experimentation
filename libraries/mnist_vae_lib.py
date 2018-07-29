@@ -141,7 +141,7 @@ class HandwritingVAE(nn.Module):
             self.encoder_forward(image)
 
         if true_class_labels is not None:
-            print('setting true class label')
+            # print('setting true class label')
             true_class_weights_np = np.zeros(class_weights.shape)
             true_class_weights_np[np.arange(class_weights.shape[0]),
                             true_class_labels] = 1

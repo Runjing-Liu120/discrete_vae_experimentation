@@ -134,6 +134,8 @@ if args.load_dec:
                                     map_location=lambda storage, loc: storage))
 
 print('training vae')
+print('set_true_class_label: ', args.set_true_class_label)
+
 t0_train = time.time()
 
 outfile = os.path.join(args.outdir, args.outfilename)
@@ -144,6 +146,6 @@ vae.train_module(train_loader, test_loader,
                     save_every = args.save_every,
                     weight_decay = args.weight_decay,
                     lr = args.learning_rate,
-                    set_true_class_label = set_true_class_label)
+                    set_true_class_label = args.set_true_class_label)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))
