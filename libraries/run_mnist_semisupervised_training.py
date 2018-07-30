@@ -97,12 +97,12 @@ train_loader_labeled = torch.utils.data.DataLoader(
 
 train_loader_unlabeled = torch.utils.data.DataLoader(
                  dataset=train_set_unlabeled,
-                 batch_size=args.batchsize,
+                 batch_size=args.batch_size,
                  shuffle=True)
 
 test_loader = torch.utils.data.DataLoader(
                 dataset=test_set,
-                batch_size=args.batchsize,
+                batch_size=args.batch_size,
                 shuffle=False)
 
 for batch_idx, d in enumerate(train_loader_labeled):
@@ -110,13 +110,13 @@ for batch_idx, d in enumerate(train_loader_labeled):
     break
 
 # SET UP VAE
-slen = train_loader_unlabeled[0]['image'].shape[-1]
+slen = train_set_unlabeled[0]['image'].shape[0]
 latent_dim = args.latent_dim
 n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
                             n_classes = n_classes,
                             slen = slen)
-vae.cuda()
+# vae.cuda()
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)
 
@@ -129,7 +129,6 @@ if args.load_dec:
                                     map_location=lambda storage, loc: storage))
 
 print('training vae')
-print('set_true_class_label: ', args.set_true_class_label)
 
 t0_train = time.time()
 
@@ -139,6 +138,7 @@ mnist_vae_lib.train_semisupervised_model(vae,
                     test_loader = test_loader,
                     labeled_images = data_labeled['image'],
                     labels = data_labeled['label'],
+                    n_epoch = args.epochs, 
                     alpha = args.alpha,
                     outfile = outfile,
                     save_every = args.save_every,

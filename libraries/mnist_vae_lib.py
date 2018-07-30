@@ -328,7 +328,7 @@ def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, labe
 
     avg_loss = 0.0
 
-    num_images = len(train_loader_labeled)
+    num_images = len(train_loader_unlabeled)
 
     i = 0
     for batch_idx, data in enumerate(train_loader_unlabeled):
