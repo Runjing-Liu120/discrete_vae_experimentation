@@ -6,5 +6,4 @@ python ../libraries/run_mnist_training.py \
 			--batch_size 256 \
 			--seed 9033 \
 			--outfilename '../mnist_vae_results_aws/mnist_vae_set_true_class' \
-			--set_true_class_label True \
-			--subsample_data False	
+			--set_true_class_label True 	
