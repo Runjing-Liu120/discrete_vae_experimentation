@@ -46,7 +46,7 @@ class MNISTDataSet(Dataset):
         # we may wish to subset
         if indices is None:
             self.num_images = round(n_image_full * propn_sample)
-            self.sample_indx = np.random.choice(n_image_full, self.num_images)
+            self.sample_indx = np.random.choice(n_image_full, self.num_images, replace = False)
         else:
             self.num_images = len(indices)
             self.sample_indx = indices
@@ -76,6 +76,32 @@ def get_mnist_dataset(data_dir = '../mnist_data/',
                             train_set = False)
 
     return train_set, test_set
+
+def get_mnist_dataset_semisupervised(data_dir = '../mnist_data/',
+                    propn_sample = 1.0, propn_labeled = 0.1):
+    total_num_train_images = 60000 # is there way to read this in?
+
+    # subsample training set if desired
+    num_train_images = round(propn_sample * total_num_train_images)
+    subs_train_set = np.random.choice(total_num_train_images, \
+                        num_train_images,
+                        replace = False)
+
+    # split training set into labeled and unlabled images
+    num_labeled_images = round(num_train_images * propn_labeled)
+    train_set_labeled = MNISTDataSet(data_dir = data_dir,
+                            indices = subs_train_set[:num_labeled_images],
+                            train_set = True)
+    train_set_unlabeled = MNISTDataSet(data_dir = data_dir,
+                            indices = subs_train_set[num_labeled_images:],
+                            train_set = True)
+
+    # get test set as usual
+    test_set = MNISTDataSet(data_dir = data_dir,
+                            propn_sample = propn_sample,
+                            train_set = False)
+
+    return train_set_labeled, train_set_unlabeled, test_set
 
 
 # class DataSubsetter(Sampler):

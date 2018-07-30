@@ -12,6 +12,8 @@ import torch.nn.functional as F
 import common_utils
 import timeit
 
+from copy import deepcopy
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class MLPEncoder(nn.Module):
@@ -137,16 +139,18 @@ class HandwritingVAE(nn.Module):
 
     def loss(self, image, true_class_labels = None):
 
-        latent_means, latent_std, latent_samples, class_weights = \
+        latent_means, latent_std, latent_samples, computed_class_weights = \
             self.encoder_forward(image)
 
         if true_class_labels is not None:
             # print('setting true class label')
-            true_class_weights_np = np.zeros(class_weights.shape)
-            true_class_weights_np[np.arange(class_weights.shape[0]),
+            true_class_weights_np = np.zeros(computed_class_weights.shape)
+            true_class_weights_np[np.arange(computed_class_weights.shape[0]),
                             true_class_labels] = 1
 
             class_weights = torch.Tensor(true_class_weights_np).to(device)
+        else:
+            class_weights = computed_class_weights
 
         # likelihood term
         loss = 0.0
@@ -184,7 +188,20 @@ class HandwritingVAE(nn.Module):
 
         loss += (kl_q_latent + kl_q_z)
 
-        return loss / image.size()[0]
+        return loss / image.size()[0], computed_class_weights
+
+    def get_semisupervised_loss(self, labeled_images, labels, unlabeled_images, alpha):
+        unlabeled_loss = self.loss(unlabeled_images)[0]
+        labeled_loss, computed_class_weights = \
+            self.loss(labeled_images, true_class_labels = labels)
+
+        cross_entropy_term = torch.sum(
+            -torch.log(computed_class_weights) * \
+            common_utils.get_one_hot_encoding_from_int(labels, self.encoder.n_classes).to(device))
+
+        return unlabeled_loss * unlabeled_images.size()[0] + \
+                labeled_loss * labeled_images.size()[0] + \
+                alpha * cross_entropy_term
 
     def eval_vae(self, train_loader, optimizer = None, train = False,
                     set_true_class_label = False):
@@ -219,8 +236,7 @@ class HandwritingVAE(nn.Module):
             else:
                 true_class_labels = None
 
-            loss = self.loss(image, true_class_labels)  * \
-                            (batch_size / num_images)
+            loss = self.loss(image, true_class_labels)[0]  * (batch_size / num_images)
 
             if train:
                 loss.backward()
@@ -299,3 +315,108 @@ class HandwritingVAE(nn.Module):
             loss_array[1, :] = train_loss_array
             loss_array[2, :] = test_loss_array
             np.savetxt(outfile + 'loss_array.txt', loss_array)
+
+
+######################################
+# FUNCTIONS TO TRAIN SEMI-SUPERVISED MODEL
+######################################
+# TODO: integrate this into the class ...
+def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, labels, optimizer, alpha):
+    assert labeled_images.shape[0] == len(labels)
+
+    vae.train()
+
+    avg_loss = 0.0
+
+    num_images = len(train_loader_unlabeled)
+
+    i = 0
+    for batch_idx, data in enumerate(train_loader_unlabeled):
+
+        if torch.cuda.is_available():
+            image = data['image'].to(device)
+        else:
+            image = data['image']
+
+        optimizer.zero_grad()
+
+        batch_size = image.size()[0]
+
+        semi_super_loss = vae.get_semisupervised_loss(labeled_images, labels, image, alpha) / num_images
+
+        semi_super_loss.backward()
+        optimizer.step()
+
+        avg_loss += semi_super_loss.data
+
+    return avg_loss
+
+def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labels,
+                    test_loader, alpha = 0.01,
+                    outfile = './mnist_vae_semisupervised',
+                    n_epoch = 200, print_every = 10, save_every = 20,
+                    weight_decay = 1e-6, lr = 0.001,
+                    save_final_enc = True):
+
+    # define optimizer
+    optimizer = optim.Adam(vae.parameters(), lr=lr,
+                            weight_decay=weight_decay)
+
+    iter_array = []
+    train_loss_array = []
+    test_loss_array = []
+
+    train_loss = vae.eval_vae(train_loader_unlabeled)
+    test_loss = vae.eval_vae(test_loader)
+    print('  * init train recon loss: {:.10g};'.format(train_loss))
+    print('  * init test recon loss: {:.10g};'.format(test_loss))
+
+    iter_array.append(0)
+    train_loss_array.append(train_loss.detach().cpu().numpy())
+    test_loss_array.append(test_loss.detach().cpu().numpy())
+
+    for epoch in range(1, n_epoch + 1):
+        start_time = timeit.default_timer()
+
+        batch_loss = train_semi_supervised_loss(vae,
+                                train_loader_unlabeled,
+                                labeled_images, labels, optimizer, alpha)
+
+        elapsed = timeit.default_timer() - start_time
+        print('[{}] loss: {:.10g}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
+
+        if epoch % print_every == 0:
+            train_loss = vae.eval_vae(train_loader_unlabeled)
+            test_loss = vae.eval_vae(test_loader)
+
+            print('  * train recon loss: {:.10g};'.format(train_loss))
+            print('  * test recon loss: {:.10g};'.format(test_loss))
+
+            iter_array.append(epoch)
+            train_loss_array.append(train_loss.detach().cpu().numpy())
+            test_loss_array.append(test_loss.detach().cpu().numpy())
+
+        if epoch % save_every == 0:
+            outfile_every = outfile + '_enc_epoch' + str(epoch)
+            print("writing the encoder parameters to " + outfile_every + '\n')
+            torch.save(vae.encoder.state_dict(), outfile_every)
+
+            outfile_every = outfile + '_dec_epoch' + str(epoch)
+            print("writing the decoder parameters to " + outfile_every + '\n')
+            torch.save(vae.decoder.state_dict(), outfile_every)
+
+
+    if save_final_enc:
+        outfile_final = outfile + '_enc_final'
+        print("writing the encoder parameters to " + outfile_final + '\n')
+        torch.save(vae.encoder.state_dict(), outfile_final)
+
+        outfile_final = outfile + '_dec_final'
+        print("writing the decoder parameters to " + outfile_final + '\n')
+        torch.save(vae.decoder.state_dict(), outfile_final)
+
+        loss_array = np.zeros((3, len(iter_array)))
+        loss_array[0, :] = iter_array
+        loss_array[1, :] = train_loss_array
+        loss_array[2, :] = test_loss_array
+        np.savetxt(outfile + 'loss_array.txt', loss_array)
