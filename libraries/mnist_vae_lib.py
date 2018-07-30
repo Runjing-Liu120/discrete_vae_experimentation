@@ -197,7 +197,7 @@ class HandwritingVAE(nn.Module):
 
         cross_entropy_term = torch.sum(
             -torch.log(computed_class_weights) * \
-            common_utils.get_one_hot_encoding_from_int(labels, self.encoder.n_classes).to(device))
+            common_utils.get_one_hot_encoding_from_int(labels, self.encoder.n_classes))
 
         return unlabeled_loss * unlabeled_images.size()[0] + \
                 labeled_loss * labeled_images.size()[0] + \
@@ -334,15 +334,17 @@ def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, labe
     for batch_idx, data in enumerate(train_loader_unlabeled):
 
         if torch.cuda.is_available():
-            image = data['image'].to(device)
+            unlabeled_images = data['image'].to(device)
+            labeled_images = labeled_images.to(device)
+            labels = labels.to(device)
         else:
-            image = data['image']
+            unlabeled_images = data['image']
 
         optimizer.zero_grad()
 
         batch_size = image.size()[0]
 
-        semi_super_loss = vae.get_semisupervised_loss(labeled_images, labels, image, alpha) / num_images
+        semi_super_loss = vae.get_semisupervised_loss(labeled_images, labels, unlabeled_images, alpha) / num_images
 
         semi_super_loss.backward()
         optimizer.step()
