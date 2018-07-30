@@ -108,6 +108,10 @@ test_loader = torch.utils.data.DataLoader(
 for batch_idx, d in enumerate(train_loader_labeled):
     data_labeled = d
     break
+print('num_train_labeled: ', train_set_labeled.num_images)
+print('num_train_unlabled: ', train_set_unlabeled.num_images)
+
+print('num_test: ', test_set.num_images)
 
 # SET UP VAE
 slen = train_set_unlabeled[0]['image'].shape[0]
@@ -116,7 +120,7 @@ n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
                             n_classes = n_classes,
                             slen = slen)
-# vae.cuda()
+vae.cuda()
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)
 
