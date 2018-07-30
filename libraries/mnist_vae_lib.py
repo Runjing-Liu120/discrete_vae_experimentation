@@ -32,9 +32,11 @@ class MLPEncoder(nn.Module):
         self.slen = slen
 
         # define the linear layers
-        self.fc1 = nn.Linear(self.n_pixels, 500)
-        self.fc2 = nn.Linear(500, self.n_pixels)
-        self.fc3 = nn.Linear(self.n_pixels, (n_classes - 1) + latent_dim * 2)
+        self.fc1 = nn.Linear(self.n_pixels, 128) # 128 hidden nodes; two more layers
+        self.fc2 = nn.Linear(128, 128)
+        self.fc3 = nn.Linear(128, 128)
+        self.fc4 = nn.Linear(128, self.n_pixels)
+        self.fc5 = nn.Linear(self.n_pixels, (n_classes - 1) + latent_dim * 2)
 
     def forward(self, image):
 
@@ -43,7 +45,9 @@ class MLPEncoder(nn.Module):
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
-        h = self.fc3(h)
+        h = F.relu(self.fc3(h))
+        h = F.relu(self.fc4(h))
+        h = self.fc5(h)
 
         # get means, std, and class weights
         indx1 = self.latent_dim
@@ -75,8 +79,10 @@ class MLPConditionalDecoder(nn.Module):
         self.slen = slen
 
         self.fc1 = nn.Linear(latent_dim + n_classes, self.n_pixels)
-        self.fc2 = nn.Linear(self.n_pixels, 500)
-        self.fc3 = nn.Linear(500, self.n_pixels * 2)
+        self.fc2 = nn.Linear(self.n_pixels, 128)
+        self.fc3 = nn.Linear(128, 128)
+        self.fc4 = nn.Linear(128, 128)
+        self.fc5 = nn.Linear(128, self.n_pixels * 2)
 
 
     def forward(self, latent_params, z):
@@ -88,7 +94,9 @@ class MLPConditionalDecoder(nn.Module):
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
-        h = self.fc3(h)
+        h = F.relu(self.fc3(h))
+        h = F.relu(self.fc4(h))
+        h = self.fc5(h)
 
         h = h.view(-1, 2, self.slen, self.slen)
 
@@ -190,14 +198,17 @@ class HandwritingVAE(nn.Module):
 
         return loss / image.size()[0], computed_class_weights
 
+    def get_class_label_cross_entropy(self, class_weights, labels):
+        return torch.sum(
+            -torch.log(class_weights) * \
+            common_utils.get_one_hot_encoding_from_int(labels, self.encoder.n_classes))
+
     def get_semisupervised_loss(self, labeled_images, labels, unlabeled_images, alpha):
         unlabeled_loss = self.loss(unlabeled_images)[0]
         labeled_loss, computed_class_weights = \
             self.loss(labeled_images, true_class_labels = labels)
 
-        cross_entropy_term = torch.sum(
-            -torch.log(computed_class_weights) * \
-            common_utils.get_one_hot_encoding_from_int(labels, self.encoder.n_classes))
+        cross_entropy_term = self.get_class_label_cross_entropy(computed_class_weights, labels)
 
         return unlabeled_loss * unlabeled_images.size()[0] + \
                 labeled_loss * labeled_images.size()[0] + \
@@ -344,7 +355,7 @@ def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, labe
 
         batch_size = unlabeled_images.size()[0]
 
-        semi_super_loss = vae.get_semisupervised_loss(labeled_images, labels, unlabeled_images, alpha) * (batch_size / num_images)
+        semi_super_loss = vae.get_semisupervised_loss(labeled_images, labels, unlabeled_images, alpha) / num_images
 
         semi_super_loss.backward()
         optimizer.step()
