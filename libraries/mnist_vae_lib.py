@@ -342,9 +342,9 @@ def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, labe
 
         optimizer.zero_grad()
 
-        batch_size = image.size()[0]
+        batch_size = unlabeled_images.size()[0]
 
-        semi_super_loss = vae.get_semisupervised_loss(labeled_images, labels, unlabeled_images, alpha) / num_images
+        semi_super_loss = vae.get_semisupervised_loss(labeled_images, labels, unlabeled_images, alpha) * (batch_size / num_images)
 
         semi_super_loss.backward()
         optimizer.step()
