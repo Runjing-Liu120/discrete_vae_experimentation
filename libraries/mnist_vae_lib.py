@@ -192,7 +192,9 @@ class HandwritingVAE(nn.Module):
         else:
             kl_q_z = -common_utils.get_multinomial_entropy(class_weights)
             # print('kl q z', kl_q_z / image.size()[0])
-            assert np.isfinite(kl_q_z.detach().cpu().numpy())
+            if not np.isfinite(kl_q_z.detach().cpu().numpy()):
+                print(class_weights)
+                assert np.isfinite(kl_q_z.detach().cpu().numpy())
 
         loss += (kl_q_latent + kl_q_z)
 
@@ -200,7 +202,7 @@ class HandwritingVAE(nn.Module):
 
     def get_class_label_cross_entropy(self, class_weights, labels):
         return torch.sum(
-            -torch.log(class_weights) * \
+            -torch.log(class_weights + 1e-8) * \
             common_utils.get_one_hot_encoding_from_int(labels, self.encoder.n_classes))
 
     def get_semisupervised_loss(self, labeled_images, labels, unlabeled_images, alpha):
