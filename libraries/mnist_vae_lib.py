@@ -35,8 +35,9 @@ class MLPEncoder(nn.Module):
         self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 128) # 128 hidden nodes; two more layers
         self.fc2 = nn.Linear(128, 128)
         self.fc3 = nn.Linear(128, 128)
-        self.fc4 = nn.Linear(128, self.n_pixels)
-        self.fc5 = nn.Linear(self.n_pixels, latent_dim * 2)
+        # self.fc4 = nn.Linear(128, self.n_pixels)
+        # self.fc5 = nn.Linear(self.n_pixels, latent_dim * 2)
+        self.fc4 = nn.Linear(128, latent_dim * 2)
 
     def forward(self, image, z):
 
@@ -47,8 +48,8 @@ class MLPEncoder(nn.Module):
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
         h = F.relu(self.fc3(h))
-        h = F.relu(self.fc4(h))
-        h = self.fc5(h)
+        h = self.fc4(h)
+        # h = self.fc5(h)
 
         # get means, std, and class weights
         indx1 = self.latent_dim
@@ -102,8 +103,8 @@ class MLPConditionalDecoder(nn.Module):
         self.n_classes = n_classes
         self.slen = slen
 
-        self.fc1 = nn.Linear(latent_dim + n_classes, self.n_pixels)
-        self.fc2 = nn.Linear(self.n_pixels, 128)
+        self.fc1 = nn.Linear(latent_dim + n_classes, 128)
+        # self.fc2 = nn.Linear(self.n_pixels, 128)
         self.fc3 = nn.Linear(128, 128)
         self.fc4 = nn.Linear(128, 128)
         self.fc5 = nn.Linear(128, self.n_pixels * 2)
@@ -117,7 +118,7 @@ class MLPConditionalDecoder(nn.Module):
         h = torch.cat((latent_params, z), dim = 1)
 
         h = F.relu(self.fc1(h))
-        h = F.relu(self.fc2(h))
+        # h = F.relu(self.fc2(h))
         h = F.relu(self.fc3(h))
         h = F.relu(self.fc4(h))
         h = self.fc5(h)
@@ -260,7 +261,7 @@ class HandwritingVAE(nn.Module):
         num_unlabeled = unlabeled_images.size()[0]
         num_labeled = labeled_images.size()[0]
         num_total = num_unlabeled + num_labeled
-        
+
         return (unlabeled_loss * num_unlabeled + \
                 labeled_loss * num_labeled + \
                 alpha * cross_entropy_term) / (num_total)
