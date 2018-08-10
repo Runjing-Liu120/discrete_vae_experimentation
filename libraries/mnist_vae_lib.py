@@ -168,10 +168,18 @@ class HandwritingVAE(nn.Module):
 
         return image_mean, image_std
 
-    def forward(self, image):
-        # Note this forward module is not differentiable
-        # bc we sample a discrete class
-        assert 1 == 2, 'not implemented yet '
+    def forward_conditional(self, image, z):
+        # z are class labels
+
+        assert len(z) == image.shape[0]
+
+        one_hot_z  = common_utils.get_one_hot_encoding_from_int(z, self.n_classes)
+        latent_means, latent_std, latent_samples = \
+            self.encoder_forward(image, one_hot_z)
+
+        image_mu, image_std = self.decoder_forward(latent_samples, one_hot_z)
+
+        return image_mu, image_std, latent_means, latent_std, latent_samples
 
     def loss(self, image, true_class_labels = None):
 
@@ -195,12 +203,8 @@ class HandwritingVAE(nn.Module):
         for z in range(self.n_classes):
             batch_z = torch.ones(image.shape[0]).to(device) * z
 
-            one_hot_batch_z = common_utils.get_one_hot_encoding_from_int(batch_z, self.n_classes)
-
-            latent_means, latent_std, latent_samples = \
-                self.encoder_forward(image, one_hot_batch_z)
-
-            image_mu, image_std = self.decoder_forward(latent_samples, one_hot_batch_z)
+            image_mu, image_std, latent_means, latent_std, latent_samples = \
+                self.forward_conditional(image, batch_z)
 
             # likelihood term
             normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
@@ -212,7 +216,7 @@ class HandwritingVAE(nn.Module):
                 assert np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))
 
             loss -= (class_weights[:, z] * normal_loglik_z).sum()
-            
+
             # entropy term
             kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
                                                                 latent_std)
@@ -253,9 +257,13 @@ class HandwritingVAE(nn.Module):
 
         cross_entropy_term = self.get_class_label_cross_entropy(computed_class_weights, labels)
 
-        return unlabeled_loss * unlabeled_images.size()[0] + \
-                labeled_loss * labeled_images.size()[0] + \
-                alpha * cross_entropy_term
+        num_unlabeled = unlabeled_images.size()[0]
+        num_labeled = labeled_images.size()[0]
+        num_total = num_unlabeled + num_labeled
+        
+        return (unlabeled_loss * num_unlabeled + \
+                labeled_loss * num_labeled + \
+                alpha * cross_entropy_term) / (num_total)
 
     def eval_vae(self, train_loader, optimizer = None, train = False,
                     set_true_class_label = False):
@@ -475,7 +483,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         print("writing the decoder parameters to " + outfile_final + '\n')
         torch.save(vae.decoder.state_dict(), outfile_final)
 
-        outfile_final = outfile + '_classifier_final' + str(epoch)
+        outfile_final = outfile + '_classifier_final'
         print("writing the classifier parameters to " + outfile_final + '\n')
         torch.save(vae.classifier.state_dict(), outfile_final)
 
