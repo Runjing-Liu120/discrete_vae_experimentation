@@ -18,8 +18,10 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class MLPEncoder(nn.Module):
     def __init__(self, latent_dim = 5,
-                    slen = 28):
+                    slen = 28,
+                    n_classes = 10):
         # the encoder returns the mean and variance of the latent parameters
+        # given the image and its class (one hot encoded)
 
         super(MLPEncoder, self).__init__()
 
@@ -27,18 +29,20 @@ class MLPEncoder(nn.Module):
         self.n_pixels = slen ** 2
         self.latent_dim = latent_dim
         self.slen = slen
+        self.n_classes = n_classes
 
         # define the linear layers
-        self.fc1 = nn.Linear(self.n_pixels, 128) # 128 hidden nodes; two more layers
+        self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 128) # 128 hidden nodes; two more layers
         self.fc2 = nn.Linear(128, 128)
         self.fc3 = nn.Linear(128, 128)
         self.fc4 = nn.Linear(128, self.n_pixels)
         self.fc5 = nn.Linear(self.n_pixels, latent_dim * 2)
 
-    def forward(self, image):
+    def forward(self, image, z):
 
         # feed through neural network
         h = image.view(-1, self.n_pixels)
+        h = torch.cat((h, z), dim = 1)
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
@@ -133,6 +137,10 @@ class HandwritingVAE(nn.Module):
 
         super(HandwritingVAE, self).__init__()
 
+        self.latent_dim = latent_dim
+        self.n_classes = n_classes
+        self.slen = slen
+
         self.encoder = MLPEncoder(latent_dim = latent_dim,
                                     slen = slen)
 
@@ -142,21 +150,19 @@ class HandwritingVAE(nn.Module):
                                                 n_classes = n_classes,
                                                 slen = slen)
 
-    def encoder_forward(self, image):
-        latent_means, latent_std = self.encoder(image)
+    def encoder_forward(self, image, one_hot_z):
+        assert one_hot_z.shape[0] == image.shape[0]
+        assert one_hot_z.shape[1] == self.n_classes
 
-        class_weights = self.classifier(image)
+        latent_means, latent_std = self.encoder(image, one_hot_z)
 
         latent_samples = torch.randn(latent_means.shape).to(device) * latent_std + latent_means
 
-        return latent_means, latent_std, latent_samples, class_weights
+        return latent_means, latent_std, latent_samples #, class_weights
 
-    def decoder_forward(self, latent_samples, z):
-        # z should be a vector of integers of length batch_size
-        assert len(z) == latent_samples.shape[0]
-
-        one_hot_z = \
-            common_utils.get_one_hot_encoding_from_int(z, self.classifier.n_classes)
+    def decoder_forward(self, latent_samples, one_hot_z):
+        assert one_hot_z.shape[0] == latent_samples.shape[0]
+        assert one_hot_z.shape[1] == self.n_classes
 
         image_mean, image_std = self.decoder(latent_samples, one_hot_z)
 
@@ -167,11 +173,12 @@ class HandwritingVAE(nn.Module):
         # bc we sample a discrete class
         assert 1 == 2, 'not implemented yet '
 
-
     def loss(self, image, true_class_labels = None):
 
-        latent_means, latent_std, latent_samples, computed_class_weights = \
-            self.encoder_forward(image)
+        # latent_means, latent_std, latent_samples, computed_class_weights = \
+        #     self.encoder_forward(image)
+
+        computed_class_weights = self.classifier(image)
 
         if true_class_labels is not None:
             # print('setting true class label')
@@ -185,10 +192,17 @@ class HandwritingVAE(nn.Module):
 
         # likelihood term
         loss = 0.0
-        for z in range(self.classifier.n_classes):
+        for z in range(self.n_classes):
             batch_z = torch.ones(image.shape[0]).to(device) * z
-            image_mu, image_std = self.decoder_forward(latent_samples, batch_z)
 
+            one_hot_batch_z = common_utils.get_one_hot_encoding_from_int(batch_z, self.n_classes)
+
+            latent_means, latent_std, latent_samples = \
+                self.encoder_forward(image, one_hot_batch_z)
+
+            image_mu, image_std = self.decoder_forward(latent_samples, one_hot_batch_z)
+
+            # likelihood term
             normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
                                                     image_std, scale = False)
 
@@ -198,13 +212,17 @@ class HandwritingVAE(nn.Module):
                 assert np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))
 
             loss -= (class_weights[:, z] * normal_loglik_z).sum()
+            
+            # entropy term
+            kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
+                                                                latent_std)
+            assert np.all(np.isfinite(kl_q_latent.detach().cpu().numpy()))
+
+            loss += (class_weights[:, z] * kl_q_latent).sum()
 
             # print('log like', loss / image.size()[0])
         # kl term for latent parameters
         # (assuming standard normal prior)
-        kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
-                                                            latent_std)
-        assert np.isfinite(kl_q_latent.detach().cpu().numpy())
 
         # print('kl q latent', kl_q_latent / image.size()[0])
 
@@ -219,14 +237,14 @@ class HandwritingVAE(nn.Module):
                 print(class_weights)
                 assert np.isfinite(kl_q_z.detach().cpu().numpy())
 
-        loss += (kl_q_latent + kl_q_z)
+        loss += kl_q_z
 
         return loss / image.size()[0], computed_class_weights
 
     def get_class_label_cross_entropy(self, class_weights, labels):
         return torch.sum(
             -torch.log(class_weights + 1e-8) * \
-            common_utils.get_one_hot_encoding_from_int(labels, self.classifier.n_classes))
+            common_utils.get_one_hot_encoding_from_int(labels, self.n_classes))
 
     def get_semisupervised_loss(self, labeled_images, labels, unlabeled_images, alpha):
         unlabeled_loss = self.loss(unlabeled_images)[0]
