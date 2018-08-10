@@ -24,8 +24,10 @@ softmax = torch.nn.Softmax(dim=1)
 def get_kl_q_standard_normal(mu, sigma):
     # The KL between a Gaussian variational distribution
     # and a standard normal
+    mu = mu.view(mu.shape[0], -1)
+    sigma = sigma.view(sigma.shape[0], -1)
     return 0.5 * torch.sum(-1 - torch.log(sigma**2 + 1e-8) + \
-                                mu**2 + sigma**2)
+                                mu**2 + sigma**2, dim = 1)
 
 def get_multinomial_entropy(z):
     return (- z * torch.log(z + 1e-8)).sum()

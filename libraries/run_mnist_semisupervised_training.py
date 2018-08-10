@@ -108,8 +108,11 @@ test_loader = torch.utils.data.DataLoader(
 for batch_idx, d in enumerate(train_loader_labeled):
     data_labeled = d
     break
+
 print('num_train_labeled: ', train_set_labeled.num_images)
-print('num_train_unlabled: ', train_set_unlabeled.num_images)
+print('check: \n', data_labeled['image'].shape[0])
+
+print('num_train_unlabeled: \n', train_set_unlabeled.num_images)
 
 print('num_test: ', test_set.num_images)
 
@@ -142,7 +145,7 @@ mnist_vae_lib.train_semisupervised_model(vae,
                     test_loader = test_loader,
                     labeled_images = data_labeled['image'],
                     labels = data_labeled['label'],
-                    n_epoch = args.epochs, 
+                    n_epoch = args.epochs,
                     alpha = args.alpha,
                     outfile = outfile,
                     save_every = args.save_every,

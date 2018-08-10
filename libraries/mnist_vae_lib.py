@@ -18,45 +18,74 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class MLPEncoder(nn.Module):
     def __init__(self, latent_dim = 5,
-                    n_classes = 10,
-                    slen = 28):
+                    slen = 28,
+                    n_classes = 10):
         # the encoder returns the mean and variance of the latent parameters
-        # and the unconstrained symplex parametrization for the classes
+        # given the image and its class (one hot encoded)
 
         super(MLPEncoder, self).__init__()
 
         # image / model parameters
         self.n_pixels = slen ** 2
         self.latent_dim = latent_dim
-        self.n_classes = n_classes
         self.slen = slen
+        self.n_classes = n_classes
 
         # define the linear layers
-        self.fc1 = nn.Linear(self.n_pixels, 500)
-        self.fc2 = nn.Linear(500, self.n_pixels)
-        self.fc3 = nn.Linear(self.n_pixels, (n_classes - 1) + latent_dim * 2)
+        self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 128) # 128 hidden nodes; two more layers
+        self.fc2 = nn.Linear(128, 128)
+        self.fc3 = nn.Linear(128, 128)
+        # self.fc4 = nn.Linear(128, self.n_pixels)
+        # self.fc5 = nn.Linear(self.n_pixels, latent_dim * 2)
+        self.fc4 = nn.Linear(128, latent_dim * 2)
 
-    def forward(self, image):
+    def forward(self, image, z):
 
         # feed through neural network
         h = image.view(-1, self.n_pixels)
+        h = torch.cat((h, z), dim = 1)
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
-        h = self.fc3(h)
+        h = F.relu(self.fc3(h))
+        h = self.fc4(h)
+        # h = self.fc5(h)
 
         # get means, std, and class weights
         indx1 = self.latent_dim
         indx2 = 2 * self.latent_dim
-        # ndx3 = 2 * self.latent_dim + self.n_classes
+        # indx3 = 2 * self.latent_dim + self.n_classes
 
         latent_means = h[:, 0:indx1]
         latent_std = torch.exp(h[:, indx1:indx2])
-        free_class_weights = h[:, indx2:]
-        class_weights = common_utils.get_symplex_from_reals(free_class_weights)
+        # free_class_weights = h[:, indx2:]
+        # class_weights = common_utils.get_symplex_from_reals(free_class_weights)
 
-        return latent_means, latent_std, class_weights
+        return latent_means, latent_std #, class_weights
 
+
+class Classifier(nn.Module):
+    def __init__(self, slen = 28, n_classes = 10):
+        """
+        Single hidden layer classifier
+        with softmax output.
+        """
+        super(Classifier, self).__init__()
+
+        self.slen = slen
+        self.n_pixels = slen ** 2
+        self.n_classes = n_classes
+
+        self.fc1 = nn.Linear(self.n_pixels, 128)
+        self.fc2 = nn.Linear(128, n_classes - 1)
+
+    def forward(self, image):
+        h = image.view(-1, self.n_pixels)
+
+        h = F.relu(self.fc1(h))
+        h = self.fc2(h)
+
+        return common_utils.get_symplex_from_reals(h)
 
 class MLPConditionalDecoder(nn.Module):
     def __init__(self, latent_dim = 5,
@@ -74,9 +103,11 @@ class MLPConditionalDecoder(nn.Module):
         self.n_classes = n_classes
         self.slen = slen
 
-        self.fc1 = nn.Linear(latent_dim + n_classes, self.n_pixels)
-        self.fc2 = nn.Linear(self.n_pixels, 500)
-        self.fc3 = nn.Linear(500, self.n_pixels * 2)
+        self.fc1 = nn.Linear(latent_dim + n_classes, 128)
+        # self.fc2 = nn.Linear(self.n_pixels, 128)
+        self.fc3 = nn.Linear(128, 128)
+        self.fc4 = nn.Linear(128, 128)
+        self.fc5 = nn.Linear(128, self.n_pixels * 2)
 
 
     def forward(self, latent_params, z):
@@ -87,8 +118,10 @@ class MLPConditionalDecoder(nn.Module):
         h = torch.cat((latent_params, z), dim = 1)
 
         h = F.relu(self.fc1(h))
-        h = F.relu(self.fc2(h))
-        h = self.fc3(h)
+        # h = F.relu(self.fc2(h))
+        h = F.relu(self.fc3(h))
+        h = F.relu(self.fc4(h))
+        h = self.fc5(h)
 
         h = h.view(-1, 2, self.slen, self.slen)
 
@@ -105,42 +138,56 @@ class HandwritingVAE(nn.Module):
 
         super(HandwritingVAE, self).__init__()
 
+        self.latent_dim = latent_dim
+        self.n_classes = n_classes
+        self.slen = slen
+
         self.encoder = MLPEncoder(latent_dim = latent_dim,
-                                    n_classes = n_classes,
                                     slen = slen)
+
+        self.classifier = Classifier(n_classes = n_classes, slen = slen)
 
         self.decoder = MLPConditionalDecoder(latent_dim = latent_dim,
                                                 n_classes = n_classes,
                                                 slen = slen)
 
-    def encoder_forward(self, image):
-        latent_means, latent_std, class_weights = self.encoder(image)
+    def encoder_forward(self, image, one_hot_z):
+        assert one_hot_z.shape[0] == image.shape[0]
+        assert one_hot_z.shape[1] == self.n_classes
+
+        latent_means, latent_std = self.encoder(image, one_hot_z)
 
         latent_samples = torch.randn(latent_means.shape).to(device) * latent_std + latent_means
 
-        return latent_means, latent_std, latent_samples, class_weights
+        return latent_means, latent_std, latent_samples #, class_weights
 
-    def decoder_forward(self, latent_samples, z):
-        # z should be a vector of integers of length batch_size
-        assert len(z) == latent_samples.shape[0]
-
-        one_hot_z = \
-            common_utils.get_one_hot_encoding_from_int(z, self.encoder.n_classes)
+    def decoder_forward(self, latent_samples, one_hot_z):
+        assert one_hot_z.shape[0] == latent_samples.shape[0]
+        assert one_hot_z.shape[1] == self.n_classes
 
         image_mean, image_std = self.decoder(latent_samples, one_hot_z)
 
         return image_mean, image_std
 
-    def forward(self, image):
-        # Note this forward module is not differentiable
-        # bc we sample a discrete class
-        assert 1 == 2, 'not implemented yet '
+    def forward_conditional(self, image, z):
+        # z are class labels
 
+        assert len(z) == image.shape[0]
+
+        one_hot_z  = common_utils.get_one_hot_encoding_from_int(z, self.n_classes)
+        latent_means, latent_std, latent_samples = \
+            self.encoder_forward(image, one_hot_z)
+
+        image_mu, image_std = self.decoder_forward(latent_samples, one_hot_z)
+
+        return image_mu, image_std, latent_means, latent_std, latent_samples
 
     def loss(self, image, true_class_labels = None):
 
-        latent_means, latent_std, latent_samples, computed_class_weights = \
-            self.encoder_forward(image)
+        # latent_means, latent_std, latent_samples, computed_class_weights = \
+        #     self.encoder_forward(image)
+
+        computed_class_weights = self.classifier(image)
 
         if true_class_labels is not None:
             # print('setting true class label')
@@ -154,10 +201,13 @@ class HandwritingVAE(nn.Module):
 
         # likelihood term
         loss = 0.0
-        for z in range(self.encoder.n_classes):
+        for z in range(self.n_classes):
             batch_z = torch.ones(image.shape[0]).to(device) * z
-            image_mu, image_std = self.decoder_forward(latent_samples, batch_z)
 
+            image_mu, image_std, latent_means, latent_std, latent_samples = \
+                self.forward_conditional(image, batch_z)
+
+            # likelihood term
             normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
                                                     image_std, scale = False)
 
@@ -168,12 +218,16 @@ class HandwritingVAE(nn.Module):
 
             loss -= (class_weights[:, z] * normal_loglik_z).sum()
 
+            # entropy term
+            kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
+                                                                latent_std)
+            assert np.all(np.isfinite(kl_q_latent.detach().cpu().numpy()))
+
+            loss += (class_weights[:, z] * kl_q_latent).sum()
+
             # print('log like', loss / image.size()[0])
         # kl term for latent parameters
         # (assuming standard normal prior)
-        kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
-                                                            latent_std)
-        assert np.isfinite(kl_q_latent.detach().cpu().numpy())
 
         # print('kl q latent', kl_q_latent / image.size()[0])
 
@@ -184,24 +238,33 @@ class HandwritingVAE(nn.Module):
         else:
             kl_q_z = -common_utils.get_multinomial_entropy(class_weights)
             # print('kl q z', kl_q_z / image.size()[0])
-            assert np.isfinite(kl_q_z.detach().cpu().numpy())
+            if not np.isfinite(kl_q_z.detach().cpu().numpy()):
+                print(class_weights)
+                assert np.isfinite(kl_q_z.detach().cpu().numpy())
 
-        loss += (kl_q_latent + kl_q_z)
+        loss += kl_q_z
 
         return loss / image.size()[0], computed_class_weights
+
+    def get_class_label_cross_entropy(self, class_weights, labels):
+        return torch.sum(
+            -torch.log(class_weights + 1e-8) * \
+            common_utils.get_one_hot_encoding_from_int(labels, self.n_classes))
 
     def get_semisupervised_loss(self, labeled_images, labels, unlabeled_images, alpha):
         unlabeled_loss = self.loss(unlabeled_images)[0]
         labeled_loss, computed_class_weights = \
             self.loss(labeled_images, true_class_labels = labels)
 
-        cross_entropy_term = torch.sum(
-            -torch.log(computed_class_weights) * \
-            common_utils.get_one_hot_encoding_from_int(labels, self.encoder.n_classes))
+        cross_entropy_term = self.get_class_label_cross_entropy(computed_class_weights, labels)
 
-        return unlabeled_loss * unlabeled_images.size()[0] + \
-                labeled_loss * labeled_images.size()[0] + \
-                alpha * cross_entropy_term
+        num_unlabeled = unlabeled_images.size()[0]
+        num_labeled = labeled_images.size()[0]
+        num_total = num_unlabeled + num_labeled
+
+        return (unlabeled_loss * num_unlabeled + \
+                labeled_loss * num_labeled + \
+                alpha * cross_entropy_term) / (num_total)
 
     def eval_vae(self, train_loader, optimizer = None, train = False,
                     set_true_class_label = False):
@@ -344,7 +407,7 @@ def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, labe
 
         batch_size = unlabeled_images.size()[0]
 
-        semi_super_loss = vae.get_semisupervised_loss(labeled_images, labels, unlabeled_images, alpha) * (batch_size / num_images)
+        semi_super_loss = vae.get_semisupervised_loss(labeled_images, labels, unlabeled_images, alpha) / num_images
 
         semi_super_loss.backward()
         optimizer.step()
@@ -407,6 +470,10 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
             print("writing the decoder parameters to " + outfile_every + '\n')
             torch.save(vae.decoder.state_dict(), outfile_every)
 
+            outfile_every = outfile + '_classifier_epoch' + str(epoch)
+            print("writing the classifier parameters to " + outfile_every + '\n')
+            torch.save(vae.classifier.state_dict(), outfile_every)
+
 
     if save_final_enc:
         outfile_final = outfile + '_enc_final'
@@ -416,6 +483,11 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         outfile_final = outfile + '_dec_final'
         print("writing the decoder parameters to " + outfile_final + '\n')
         torch.save(vae.decoder.state_dict(), outfile_final)
+
+        outfile_final = outfile + '_classifier_final'
+        print("writing the classifier parameters to " + outfile_final + '\n')
+        torch.save(vae.classifier.state_dict(), outfile_final)
+
 
         loss_array = np.zeros((3, len(iter_array)))
         loss_array[0, :] = iter_array
