@@ -83,7 +83,7 @@ class Classifier(nn.Module):
         h = image.view(-1, self.n_pixels)
 
         h = F.relu(self.fc1(h))
-        h = F.relu(self.fc2(h))
+        h = self.fc2(h)
 
         return common_utils.get_symplex_from_reals(h)
 
