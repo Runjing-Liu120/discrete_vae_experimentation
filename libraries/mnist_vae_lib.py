@@ -171,13 +171,16 @@ class HandwritingVAE(nn.Module):
 
     def forward_conditional(self, image, z):
         # z are class labels
-
         assert len(z) == image.shape[0]
 
+        # one hot encode z
         one_hot_z  = common_utils.get_one_hot_encoding_from_int(z, self.n_classes)
+
+        # pass through encoder
         latent_means, latent_std, latent_samples = \
             self.encoder_forward(image, one_hot_z)
 
+        # pass through decoder 
         image_mu, image_std = self.decoder_forward(latent_samples, one_hot_z)
 
         return image_mu, image_std, latent_means, latent_std, latent_samples
@@ -190,7 +193,7 @@ class HandwritingVAE(nn.Module):
         computed_class_weights = self.classifier(image)
 
         if true_class_labels is not None:
-            # print('setting true class label')
+            # setting true class label
             true_class_weights_np = np.zeros(computed_class_weights.shape)
             true_class_weights_np[np.arange(computed_class_weights.shape[0]),
                             true_class_labels] = 1
@@ -363,6 +366,10 @@ class HandwritingVAE(nn.Module):
                 print("writing the decoder parameters to " + outfile_every + '\n')
                 torch.save(self.decoder.state_dict(), outfile_every)
 
+                outfile_every = outfile + '_classifier_epoch' + str(epoch)
+                print("writing the classifier parameters to " + outfile_every + '\n')
+                torch.save(vae.classifier.state_dict(), outfile_every)
+
 
         if save_final_enc:
             outfile_final = outfile + '_enc_final'
@@ -372,6 +379,10 @@ class HandwritingVAE(nn.Module):
             outfile_final = outfile + '_dec_final'
             print("writing the decoder parameters to " + outfile_final + '\n')
             torch.save(self.decoder.state_dict(), outfile_final)
+
+            outfile_final = outfile + '_classifier_final'
+            print("writing the classifier parameters to " + outfile_final + '\n')
+            torch.save(vae.classifier.state_dict(), outfile_final)
 
             loss_array = np.zeros((3, len(iter_array)))
             loss_array[0, :] = iter_array
