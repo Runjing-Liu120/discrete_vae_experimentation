@@ -6,7 +6,7 @@ import torch.nn as nn
 
 import torch.optim as optim
 
-from torch.distributions import Normal
+from torch.distributions import Normal, Categorical
 import torch.nn.functional as F
 
 import common_utils
@@ -180,12 +180,37 @@ class HandwritingVAE(nn.Module):
         latent_means, latent_std, latent_samples = \
             self.encoder_forward(image, one_hot_z)
 
-        # pass through decoder 
+        # pass through decoder
         image_mu, image_std = self.decoder_forward(latent_samples, one_hot_z)
 
         return image_mu, image_std, latent_means, latent_std, latent_samples
 
-    def loss(self, image, true_class_labels = None):
+    def get_conditional_loss(self, image, z):
+        # Returns the expectation of the objective conditional
+        # on the class label z
+
+        batch_z = torch.ones(image.shape[0]).to(device) * z
+
+        image_mu, image_std, latent_means, latent_std, latent_samples = \
+            self.forward_conditional(image, batch_z)
+
+        # likelihood term
+        normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
+                                                image_std, scale = False)
+
+        if not(np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))):
+            print(z)
+            print(image_std)
+            assert np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))
+
+        # entropy term
+        kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
+                                                            latent_std)
+        assert np.all(np.isfinite(kl_q_latent.detach().cpu().numpy()))
+
+        return -normal_loglik_z + kl_q_latent
+
+    def loss(self, image, true_class_labels = None, reinforce = False):
 
         # latent_means, latent_std, latent_samples, computed_class_weights = \
         #     self.encoder_forward(image)
@@ -204,37 +229,28 @@ class HandwritingVAE(nn.Module):
 
         # likelihood term
         loss = 0.0
+        ps_loss = 0.0
+
+        if reinforce:
+            cat_rv = Categorical(probs = class_weights)
+            z_sample = cat_rv.sample().detach()
+
         for z in range(self.n_classes):
-            batch_z = torch.ones(image.shape[0]).to(device) * z
+            conditional_loss = self.get_conditional_loss(image, z)
+            loss += (class_weights[:, z] * conditional_loss).sum()
 
-            image_mu, image_std, latent_means, latent_std, latent_samples = \
-                self.forward_conditional(image, batch_z)
+            if reinforce:
+                mask = np.zeros(len(z_sample))
+                mask[z_sample.cpu().numpy() == z] = 1
+                mask = torch.from_numpy(mask).float().to(device)
+                ps_loss += \
+                    (conditional_loss.detach() * \
+                    .log(class_weights[:, z] + 1e-8) * mask.detach() + \
+                    conditional_loss * mask).sum()
+            else:
+                ps_loss = None
 
-            # likelihood term
-            normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
-                                                    image_std, scale = False)
-
-            if not(np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))):
-                print(z)
-                print(image_std)
-                assert np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))
-
-            loss -= (class_weights[:, z] * normal_loglik_z).sum()
-
-            # entropy term
-            kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
-                                                                latent_std)
-            assert np.all(np.isfinite(kl_q_latent.detach().cpu().numpy()))
-
-            loss += (class_weights[:, z] * kl_q_latent).sum()
-
-            # print('log like', loss / image.size()[0])
-        # kl term for latent parameters
-        # (assuming standard normal prior)
-
-        # print('kl q latent', kl_q_latent / image.size()[0])
-
-        # entropy term for class weights
+        # kl term for class weights
         # (assuming uniform prior)
         if true_class_labels is not None:
             kl_q_z = 0.0
@@ -247,16 +263,16 @@ class HandwritingVAE(nn.Module):
 
         loss += kl_q_z
 
-        return loss / image.size()[0], computed_class_weights
+        return loss / image.size()[0], computed_class_weights, ps_loss
 
     def get_class_label_cross_entropy(self, class_weights, labels):
         return torch.sum(
             -torch.log(class_weights + 1e-8) * \
             common_utils.get_one_hot_encoding_from_int(labels, self.n_classes))
 
-    def get_semisupervised_loss(self, labeled_images, labels, unlabeled_images, alpha):
-        unlabeled_loss = self.loss(unlabeled_images)[0]
-        labeled_loss, computed_class_weights = \
+    def get_semisupervised_loss(self, labeled_images, labels, unlabeled_images, alpha, reinforce = False):
+        unlabeled_loss, _, unlabeled_ps_loss = self.loss(unlabeled_images, reinforce = reinforce)
+        labeled_loss, computed_class_weights, _ = \
             self.loss(labeled_images, true_class_labels = labels)
 
         cross_entropy_term = self.get_class_label_cross_entropy(computed_class_weights, labels)
@@ -265,9 +281,18 @@ class HandwritingVAE(nn.Module):
         num_labeled = labeled_images.size()[0]
         num_total = num_unlabeled + num_labeled
 
-        return (unlabeled_loss * num_unlabeled + \
+        loss = (unlabeled_loss * num_unlabeled + \
                 labeled_loss * num_labeled + \
                 alpha * cross_entropy_term) / (num_total)
+
+        if reinforce:
+            ps_loss = (unlabeled_ps_loss * num_unlabeled + \
+                    labeled_loss * num_labeled + \
+                    alpha * cross_entropy_term) / (num_total)
+        else:
+            ps_loss = None
+
+        return loss, ps_loss
 
     def eval_vae(self, train_loader, optimizer = None, train = False,
                     set_true_class_label = False):
@@ -395,7 +420,8 @@ class HandwritingVAE(nn.Module):
 # FUNCTIONS TO TRAIN SEMI-SUPERVISED MODEL
 ######################################
 # TODO: integrate this into the class ...
-def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, labels, optimizer, alpha):
+def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, \
+                        labels, optimizer, alpha = 1.0, reinforce = False):
     assert labeled_images.shape[0] == len(labels)
 
     vae.train()
@@ -418,9 +444,15 @@ def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, labe
 
         batch_size = unlabeled_images.size()[0]
 
-        semi_super_loss = vae.get_semisupervised_loss(labeled_images, labels, unlabeled_images, alpha) / num_images
+        semi_super_loss, semi_super_ps_loss = vae.get_semisupervised_loss(labeled_images, \
+                                        labels, unlabeled_images, alpha, \
+                                        reinforce = reinforce)
 
-        semi_super_loss.backward()
+        if reinforce:
+            (semi_super_ps_loss / num_images).backward()
+        else:
+            (semi_super_loss / num_images).backward()
+
         optimizer.step()
 
         avg_loss += semi_super_loss.data
@@ -428,7 +460,7 @@ def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, labe
     return avg_loss
 
 def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labels,
-                    test_loader, alpha = 0.01,
+                    test_loader, alpha = 0.01, reinforce = False,
                     outfile = './mnist_vae_semisupervised',
                     n_epoch = 200, print_every = 10, save_every = 20,
                     weight_decay = 1e-6, lr = 0.001,
@@ -456,7 +488,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
 
         batch_loss = train_semi_supervised_loss(vae,
                                 train_loader_unlabeled,
-                                labeled_images, labels, optimizer, alpha)
+                                labeled_images, labels, optimizer, alpha,
+                                reinforce = reinforce)
 
         elapsed = timeit.default_timer() - start_time
         print('[{}] loss: {:.10g}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
