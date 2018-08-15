@@ -455,7 +455,7 @@ def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, \
 
         optimizer.step()
 
-        avg_loss += semi_super_loss.data
+        avg_loss += semi_super_loss.data / num_images
 
     return avg_loss
 
