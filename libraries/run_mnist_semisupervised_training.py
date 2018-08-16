@@ -37,8 +37,11 @@ parser.add_argument('--learning_rate', type = float, default = 0.001)
 
 parser.add_argument('--propn_labeled', type = float, default = 0.1,
                     help = 'proportion of training data labeled')
-parser.add_argument('--alpha', type = float, default = 0.1,
+parser.add_argument('--alpha', type = float, default = 1.0,
                     help = 'weight of cross_entropy_term')
+
+parser.add_argument('--reinforce', type=distutils.util.strtobool, default='False',
+                    help='whether or not to use reinforce estimator')
 
 # saving encoder
 parser.add_argument('--outdir', type = str,
@@ -150,6 +153,7 @@ mnist_vae_lib.train_semisupervised_model(vae,
                     outfile = outfile,
                     save_every = args.save_every,
                     weight_decay = args.weight_decay,
-                    lr = args.learning_rate)
+                    lr = args.learning_rate,
+                    reinforce = args.reinforce)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))
