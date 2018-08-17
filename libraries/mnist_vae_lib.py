@@ -296,7 +296,6 @@ class HandwritingVAE(nn.Module):
             num_labeled = 1.0
 
         num_unlabeled = unlabeled_images.size()[0]
-        num_total = num_unlabeled + num_labeled
 
         # the loss scaled so that the gradient is unbiased
         loss_scaled = unlabeled_loss * num_unlabeled_total + \
@@ -440,6 +439,20 @@ class HandwritingVAE(nn.Module):
 # FUNCTIONS TO TRAIN SEMI-SUPERVISED MODEL
 ######################################
 # TODO: integrate this into the class ...
+def eval_classification_accuracy(classifier, loader):
+    accuracy = 0.0
+    n_images = 0.0
+
+    for batch_idx, data in enumerate(loader):
+        class_weights = classifier(data['image'])
+
+        z_ind = torch.argmax(class_weights, dim = 1)
+
+        accuracy += torch.sum(z_ind == data['label']).float()
+
+        n_images += len(z_ind)
+
+    return accuracy / n_images
 def eval_semi_supervised_loss(vae, loader_unlabeled,
                         labeled_images = None, labels = None,
                         optimizer = None, train = False,
@@ -515,6 +528,12 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     print('  * init train recon loss: {:.10g};'.format(train_loss))
     print('  * init test recon loss: {:.10g};'.format(test_loss))
 
+    train_class_accuracy = eval_classification_accuracy(vae.classifier, train_loader_unlabeled)
+    test_class_accuracy = eval_classification_accuracy(vae.classifier, test_loader)
+
+    print('  * init train class accuracy: {:.4g};'.format(train_class_accuracy))
+    print('  * init test class accuracy: {:4g};'.format(test_class_accuracy))
+
     iter_array.append(0)
     train_loss_array.append(train_loss.detach().cpu().numpy())
     test_loss_array.append(test_loss.detach().cpu().numpy())
@@ -541,6 +560,12 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
 
             print('  * train recon loss: {:.10g};'.format(train_loss))
             print('  * test recon loss: {:.10g};'.format(test_loss))
+
+            train_class_accuracy = eval_classification_accuracy(vae.classifier, train_loader_unlabeled)
+            test_class_accuracy = eval_classification_accuracy(vae.classifier, test_loader)
+
+            print('  * train class accuracy: {:.4g};'.format(train_class_accuracy))
+            print('  * test class accuracy: {:4g};'.format(test_class_accuracy))
 
             iter_array.append(epoch)
             train_loss_array.append(train_loss.detach().cpu().numpy())
