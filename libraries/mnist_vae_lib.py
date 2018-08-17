@@ -200,7 +200,7 @@ class HandwritingVAE(nn.Module):
         # loglik_z = common_utils.get_normal_loglik(image, image_mu,
         #                                         image_std, scale = False)
 
-        loglik_z = common_utils.get_bernoulli_loglik(image, image_mu)
+        loglik_z = common_utils.get_bernoulli_loglik(image_mu, image)
 
         if not(np.all(np.isfinite(loglik_z.detach().cpu().numpy()))):
             print(z)
@@ -523,7 +523,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         start_time = timeit.default_timer()
 
         _, unlabeled_loss = \
-                eval_semi_supervised_loss(vae, train_loader_unlabeled, 
+                eval_semi_supervised_loss(vae, train_loader_unlabeled,
                                 labeled_images = labeled_images,
                                 labels = labels,
                                 optimizer = optimizer,
