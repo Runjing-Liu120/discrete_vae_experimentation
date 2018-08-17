@@ -18,6 +18,9 @@ def get_normal_loglik(x, mean, std, scale = False):
 
     return (recon_losses / factor).view(x.size(0), -1).sum(1)
 
+def get_bernoulli_loglik(pi, x):
+    loglik = (x * torch.log(pi + 1e-8) + (1 - x) * torch.log(1 - pi + 1e-8))
+    return loglik.view(x.size(0), -1).sum(1)
 
 softmax = torch.nn.Softmax(dim=1)
 

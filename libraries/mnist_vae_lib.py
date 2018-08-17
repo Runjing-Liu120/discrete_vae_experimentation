@@ -107,8 +107,9 @@ class MLPConditionalDecoder(nn.Module):
         # self.fc2 = nn.Linear(self.n_pixels, 128)
         self.fc3 = nn.Linear(128, 128)
         self.fc4 = nn.Linear(128, 128)
-        self.fc5 = nn.Linear(128, self.n_pixels * 2)
+        self.fc5 = nn.Linear(128, self.n_pixels)
 
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, latent_params, z):
         assert latent_params.shape[1] == self.latent_dim
@@ -123,12 +124,13 @@ class MLPConditionalDecoder(nn.Module):
         h = F.relu(self.fc4(h))
         h = self.fc5(h)
 
-        h = h.view(-1, 2, self.slen, self.slen)
+        h = h.view(-1, self.slen, self.slen)
 
-        image_mean = h[:, 0, :, :]
-        image_std = torch.exp(h[:, 1, :, :])
+        # image_mean = h[:, 0, :, :]
+        # image_std = torch.exp(h[:, 1, :, :])
+        image_mean = self.sigmoid(h)
 
-        return image_mean, image_std
+        return image_mean # , image_std
 
 class HandwritingVAE(nn.Module):
 
@@ -165,9 +167,9 @@ class HandwritingVAE(nn.Module):
         assert one_hot_z.shape[0] == latent_samples.shape[0]
         assert one_hot_z.shape[1] == self.n_classes
 
-        image_mean, image_std = self.decoder(latent_samples, one_hot_z)
+        image_mean = self.decoder(latent_samples, one_hot_z)
 
-        return image_mean, image_std
+        return image_mean # , image_std
 
     def forward_conditional(self, image, z):
         # z are class labels
@@ -181,9 +183,9 @@ class HandwritingVAE(nn.Module):
             self.encoder_forward(image, one_hot_z)
 
         # pass through decoder
-        image_mu, image_std = self.decoder_forward(latent_samples, one_hot_z)
+        image_mu = self.decoder_forward(latent_samples, one_hot_z)
 
-        return image_mu, image_std, latent_means, latent_std, latent_samples
+        return image_mu, latent_means, latent_std, latent_samples
 
     def get_conditional_loss(self, image, z):
         # Returns the expectation of the objective conditional
@@ -191,24 +193,26 @@ class HandwritingVAE(nn.Module):
 
         batch_z = torch.ones(image.shape[0]).to(device) * z
 
-        image_mu, image_std, latent_means, latent_std, latent_samples = \
+        image_mu, latent_means, latent_std, latent_samples = \
             self.forward_conditional(image, batch_z)
 
         # likelihood term
-        normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
-                                                image_std, scale = False)
+        # loglik_z = common_utils.get_normal_loglik(image, image_mu,
+        #                                         image_std, scale = False)
 
-        if not(np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))):
+        loglik_z = common_utils.get_bernoulli_loglik(image, image_mu)
+
+        if not(np.all(np.isfinite(loglik_z.detach().cpu().numpy()))):
             print(z)
-            print(image_std)
-            assert np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))
+            print(image_mu)
+            assert np.all(np.isfinite(loglik_z.detach().cpu().numpy()))
 
         # entropy term
         kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
                                                             latent_std)
         assert np.all(np.isfinite(kl_q_latent.detach().cpu().numpy()))
 
-        return -normal_loglik_z + kl_q_latent
+        return -loglik_z + kl_q_latent
 
     def loss(self, image, true_class_labels = None, reinforce = False):
 
