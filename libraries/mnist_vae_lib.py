@@ -453,6 +453,7 @@ def eval_classification_accuracy(classifier, loader):
         n_images += len(z_ind)
 
     return accuracy / n_images
+
 def eval_semi_supervised_loss(vae, loader_unlabeled,
                         labeled_images = None, labels = None,
                         optimizer = None, train = False,
@@ -522,6 +523,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     iter_array = []
     train_loss_array = []
     test_loss_array = []
+    train_class_accuracy_array = []
+    test_class_accuracy_array = []
 
     _, train_loss = eval_semi_supervised_loss(vae, train_loader_unlabeled)
     _, test_loss = eval_semi_supervised_loss(vae, test_loader)
@@ -537,6 +540,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     iter_array.append(0)
     train_loss_array.append(train_loss.detach().cpu().numpy())
     test_loss_array.append(test_loss.detach().cpu().numpy())
+    train_class_accuracy_array.append(train_class_accuracy.detach().cpu().numpy())
+    test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
 
     for epoch in range(1, n_epoch + 1):
         start_time = timeit.default_timer()
@@ -570,6 +575,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
             iter_array.append(epoch)
             train_loss_array.append(train_loss.detach().cpu().numpy())
             test_loss_array.append(test_loss.detach().cpu().numpy())
+            train_class_accuracy_array.append(train_class_accuracy.detach().cpu().numpy())
+            test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
 
         if epoch % save_every == 0:
             outfile_every = outfile + '_enc_epoch' + str(epoch)
@@ -599,8 +606,11 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         torch.save(vae.classifier.state_dict(), outfile_final)
 
 
-        loss_array = np.zeros((3, len(iter_array)))
+        loss_array = np.zeros((5, len(iter_array)))
         loss_array[0, :] = iter_array
         loss_array[1, :] = train_loss_array
         loss_array[2, :] = test_loss_array
+        loss_array[3, :] = train_class_accuracy_array
+        loss_array[4, :] = test_class_accuracy_array
+
         np.savetxt(outfile + 'loss_array.txt', loss_array)
