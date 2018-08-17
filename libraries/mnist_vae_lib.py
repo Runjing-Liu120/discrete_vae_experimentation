@@ -444,11 +444,19 @@ def eval_classification_accuracy(classifier, loader):
     n_images = 0.0
 
     for batch_idx, data in enumerate(loader):
-        class_weights = classifier(data['image'])
+
+        if torch.cuda.is_available():
+            image = data['image'].to(device)
+            label = data['label'].to(device)
+        else:
+            image = data['image']
+            label = data['label']
+
+        class_weights = classifier(image)
 
         z_ind = torch.argmax(class_weights, dim = 1)
 
-        accuracy += torch.sum(z_ind == data['label']).float()
+        accuracy += torch.sum(z_ind == label).float()
 
         n_images += len(z_ind)
 
