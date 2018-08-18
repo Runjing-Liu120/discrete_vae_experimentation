@@ -232,6 +232,9 @@ class HandwritingVAE(nn.Module):
             cat_rv = Categorical(probs = class_weights)
             z_sample = cat_rv.sample().detach()
 
+            # print('class_weights', class_weights[0, :])
+            # print('z_sample', z_sample)
+
         for z in range(self.n_classes):
             conditional_loss = self.get_conditional_loss(image, z)
             loss += (class_weights[:, z] * conditional_loss).sum()
@@ -253,6 +256,7 @@ class HandwritingVAE(nn.Module):
             kl_q_z = 0.0
         else:
             kl_q_z = -common_utils.get_multinomial_entropy(class_weights)
+
             # print('kl q z', kl_q_z / image.size()[0])
             if not np.isfinite(kl_q_z.detach().cpu().numpy()):
                 print(class_weights)
@@ -322,10 +326,10 @@ class HandwritingVAE(nn.Module):
         for batch_idx, data in enumerate(train_loader):
             # first entry of data is the actual image
             # the second entry is the true class label
-            if torch.cuda.is_available():
-                image = data['image'].to(device)
-            else:
-                image = data['image']
+            # if torch.cuda.is_available():
+            image = data['image'].to(device)
+            # else:
+            #     image = data['image']
 
             # i+=1; print('batch {}'.format(i))
 
@@ -438,12 +442,12 @@ def eval_classification_accuracy(classifier, loader):
 
     for batch_idx, data in enumerate(loader):
 
-        if torch.cuda.is_available():
-            image = data['image'].to(device)
-            label = data['label'].to(device)
-        else:
-            image = data['image']
-            label = data['label']
+        # if torch.cuda.is_available():
+        image = data['image'].to(device)
+        label = data['label'].to(device)
+        # else:
+        #     image = data['image']
+        #     label = data['label']
 
         class_weights = classifier(image)
 
@@ -473,13 +477,13 @@ def eval_semi_supervised_loss(vae, loader_unlabeled,
     i = 0
     for batch_idx, data in enumerate(loader_unlabeled):
 
-        if torch.cuda.is_available():
-            unlabeled_images = data['image'].to(device)
-            if labeled_images is not None:
-                labeled_images = labeled_images.to(device)
-                labels = labels.to(device)
-        else:
-            unlabeled_images = data['image']
+        # if torch.cuda.is_available():
+        unlabeled_images = data['image'].to(device)
+        if labeled_images is not None:
+            labeled_images = labeled_images.to(device)
+            labels = labels.to(device)
+        # else:
+        #     unlabeled_images = data['image']
 
         if optimizer is not None:
             optimizer.zero_grad()
