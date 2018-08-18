@@ -107,8 +107,9 @@ class MLPConditionalDecoder(nn.Module):
         # self.fc2 = nn.Linear(self.n_pixels, 128)
         self.fc3 = nn.Linear(128, 128)
         self.fc4 = nn.Linear(128, 128)
-        self.fc5 = nn.Linear(128, self.n_pixels * 2)
+        self.fc5 = nn.Linear(128, self.n_pixels)
 
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, latent_params, z):
         assert latent_params.shape[1] == self.latent_dim
@@ -123,12 +124,13 @@ class MLPConditionalDecoder(nn.Module):
         h = F.relu(self.fc4(h))
         h = self.fc5(h)
 
-        h = h.view(-1, 2, self.slen, self.slen)
+        h = h.view(-1, self.slen, self.slen)
 
-        image_mean = h[:, 0, :, :]
-        image_std = torch.exp(h[:, 1, :, :])
+        # image_mean = h[:, 0, :, :]
+        # image_std = torch.exp(h[:, 1, :, :])
+        image_mean = self.sigmoid(h)
 
-        return image_mean, image_std
+        return image_mean # , image_std
 
 class HandwritingVAE(nn.Module):
 
@@ -165,9 +167,9 @@ class HandwritingVAE(nn.Module):
         assert one_hot_z.shape[0] == latent_samples.shape[0]
         assert one_hot_z.shape[1] == self.n_classes
 
-        image_mean, image_std = self.decoder(latent_samples, one_hot_z)
+        image_mean = self.decoder(latent_samples, one_hot_z)
 
-        return image_mean, image_std
+        return image_mean # , image_std
 
     def forward_conditional(self, image, z):
         # z are class labels
@@ -181,9 +183,9 @@ class HandwritingVAE(nn.Module):
             self.encoder_forward(image, one_hot_z)
 
         # pass through decoder
-        image_mu, image_std = self.decoder_forward(latent_samples, one_hot_z)
+        image_mu = self.decoder_forward(latent_samples, one_hot_z)
 
-        return image_mu, image_std, latent_means, latent_std, latent_samples
+        return image_mu, latent_means, latent_std, latent_samples
 
     def get_conditional_loss(self, image, z):
         # Returns the expectation of the objective conditional
@@ -191,24 +193,26 @@ class HandwritingVAE(nn.Module):
 
         batch_z = torch.ones(image.shape[0]).to(device) * z
 
-        image_mu, image_std, latent_means, latent_std, latent_samples = \
+        image_mu, latent_means, latent_std, latent_samples = \
             self.forward_conditional(image, batch_z)
 
         # likelihood term
-        normal_loglik_z = common_utils.get_normal_loglik(image, image_mu,
-                                                image_std, scale = False)
+        # loglik_z = common_utils.get_normal_loglik(image, image_mu,
+        #                                         image_std, scale = False)
 
-        if not(np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))):
+        loglik_z = common_utils.get_bernoulli_loglik(image_mu, image)
+
+        if not(np.all(np.isfinite(loglik_z.detach().cpu().numpy()))):
             print(z)
-            print(image_std)
-            assert np.all(np.isfinite(normal_loglik_z.detach().cpu().numpy()))
+            print(image_mu)
+            assert np.all(np.isfinite(loglik_z.detach().cpu().numpy()))
 
         # entropy term
         kl_q_latent = common_utils.get_kl_q_standard_normal(latent_means, \
                                                             latent_std)
         assert np.all(np.isfinite(kl_q_latent.detach().cpu().numpy()))
 
-        return -normal_loglik_z + kl_q_latent
+        return -loglik_z + kl_q_latent
 
     def loss(self, image, true_class_labels = None, reinforce = False):
 
@@ -270,29 +274,44 @@ class HandwritingVAE(nn.Module):
             -torch.log(class_weights + 1e-8) * \
             common_utils.get_one_hot_encoding_from_int(labels, self.n_classes))
 
-    def get_semisupervised_loss(self, labeled_images, labels, unlabeled_images, alpha, reinforce = False):
-        unlabeled_loss, _, unlabeled_ps_loss = self.loss(unlabeled_images, reinforce = reinforce)
-        labeled_loss, computed_class_weights, _ = \
-            self.loss(labeled_images, true_class_labels = labels)
+    def get_semisupervised_loss(self, unlabeled_images, num_unlabeled_total,
+                                    labeled_images = None, labels = None,
+                                    alpha = 1.0, reinforce = False):
 
-        cross_entropy_term = self.get_class_label_cross_entropy(computed_class_weights, labels)
+        unlabeled_loss, _, unlabeled_ps_loss = self.loss(unlabeled_images, reinforce = reinforce)
+
+        if labeled_images is not None:
+            assert labels is not None
+
+            labeled_loss, computed_class_weights, _ = \
+                self.loss(labeled_images, true_class_labels = labels)
+
+            cross_entropy_term = \
+                self.get_class_label_cross_entropy(computed_class_weights, labels)
+
+            num_labeled = labeled_images.size()[0]
+        else:
+            labeled_loss = 0.0
+            cross_entropy_term = 0.0
+            num_labeled = 1.0
 
         num_unlabeled = unlabeled_images.size()[0]
-        num_labeled = labeled_images.size()[0]
-        num_total = num_unlabeled + num_labeled
 
-        loss = (unlabeled_loss * num_unlabeled + \
+        # the loss scaled so that the gradient is unbiased
+        loss_scaled = unlabeled_loss * num_unlabeled_total + \
                 labeled_loss * num_labeled + \
-                alpha * cross_entropy_term) / (num_total)
+                alpha * cross_entropy_term
 
         if reinforce:
-            ps_loss = (unlabeled_ps_loss * num_unlabeled + \
+            ps_loss_scaled = unlabeled_ps_loss * num_unlabeled_total + \
                     labeled_loss * num_labeled + \
-                    alpha * cross_entropy_term) / (num_total)
+                    alpha * cross_entropy_term
         else:
-            ps_loss = None
+            ps_loss_scaled = None
 
-        return loss, ps_loss
+        return loss_scaled, ps_loss_scaled, \
+                    unlabeled_loss, labeled_loss, \
+                    cross_entropy_term / num_labeled
 
     def eval_vae(self, train_loader, optimizer = None, train = False,
                     set_true_class_label = False):
@@ -327,13 +346,13 @@ class HandwritingVAE(nn.Module):
             else:
                 true_class_labels = None
 
-            loss = self.loss(image, true_class_labels)[0]  * (batch_size / num_images)
+            loss = self.loss(image, true_class_labels)[0]
 
             if train:
-                loss.backward()
+                (loss * num_images).backward()
                 optimizer.step()
 
-            avg_loss += loss.data
+            avg_loss += loss.data  * (batch_size / num_images)
 
         return avg_loss
 
@@ -420,44 +439,83 @@ class HandwritingVAE(nn.Module):
 # FUNCTIONS TO TRAIN SEMI-SUPERVISED MODEL
 ######################################
 # TODO: integrate this into the class ...
-def train_semi_supervised_loss(vae, train_loader_unlabeled, labeled_images, \
-                        labels, optimizer, alpha = 1.0, reinforce = False):
-    assert labeled_images.shape[0] == len(labels)
+def eval_classification_accuracy(classifier, loader):
+    accuracy = 0.0
+    n_images = 0.0
 
-    vae.train()
+    for batch_idx, data in enumerate(loader):
 
-    avg_loss = 0.0
+        if torch.cuda.is_available():
+            image = data['image'].to(device)
+            label = data['label'].to(device)
+        else:
+            image = data['image']
+            label = data['label']
 
-    num_images = len(train_loader_unlabeled)
+        class_weights = classifier(image)
+
+        z_ind = torch.argmax(class_weights, dim = 1)
+
+        accuracy += torch.sum(z_ind == label).float()
+
+        n_images += len(z_ind)
+
+    return accuracy / n_images
+
+def eval_semi_supervised_loss(vae, loader_unlabeled,
+                        labeled_images = None, labels = None,
+                        optimizer = None, train = False,
+                        alpha = 1.0, reinforce = False):
+    if train:
+        vae.train()
+        assert optimizer is not None
+    else:
+        vae.eval()
+
+    avg_semisuper_loss = 0.0
+    avg_unlabeled_loss = 0.0
+
+    num_unlabeled_total = loader_unlabeled.sampler.data_source.num_images
 
     i = 0
-    for batch_idx, data in enumerate(train_loader_unlabeled):
+    for batch_idx, data in enumerate(loader_unlabeled):
 
         if torch.cuda.is_available():
             unlabeled_images = data['image'].to(device)
-            labeled_images = labeled_images.to(device)
-            labels = labels.to(device)
+            if labeled_images is not None:
+                labeled_images = labeled_images.to(device)
+                labels = labels.to(device)
         else:
             unlabeled_images = data['image']
 
-        optimizer.zero_grad()
+        if optimizer is not None:
+            optimizer.zero_grad()
 
         batch_size = unlabeled_images.size()[0]
 
-        semi_super_loss, semi_super_ps_loss = vae.get_semisupervised_loss(labeled_images, \
-                                        labels, unlabeled_images, alpha, \
-                                        reinforce = reinforce)
+        semi_super_loss, semi_super_ps_loss, \
+            unlabeled_loss, labeled_loss, \
+            cross_entropy_term = \
+                vae.get_semisupervised_loss(unlabeled_images,
+                                            num_unlabeled_total,
+                                            labeled_images = labeled_images,
+                                            labels = labels,
+                                            alpha = alpha,
+                                            reinforce = reinforce)
 
-        if reinforce:
-            (semi_super_ps_loss / num_images).backward()
-        else:
-            (semi_super_loss / num_images).backward()
+        if train:
+            if reinforce:
+                (semi_super_ps_loss).backward()
+            else:
+                (semi_super_loss).backward()
+        if train:
+            optimizer.step()
 
-        optimizer.step()
+        avg_semisuper_loss += semi_super_loss.data / num_unlabeled_total
+        avg_unlabeled_loss += unlabeled_loss.data * \
+                (batch_size / num_unlabeled_total)
 
-        avg_loss += semi_super_loss.data / num_images
-
-    return avg_loss
+    return avg_semisuper_loss, avg_unlabeled_loss
 
 def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labels,
                     test_loader, alpha = 0.01, reinforce = False,
@@ -473,37 +531,60 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     iter_array = []
     train_loss_array = []
     test_loss_array = []
+    train_class_accuracy_array = []
+    test_class_accuracy_array = []
 
-    train_loss = vae.eval_vae(train_loader_unlabeled)
-    test_loss = vae.eval_vae(test_loader)
+    _, train_loss = eval_semi_supervised_loss(vae, train_loader_unlabeled)
+    _, test_loss = eval_semi_supervised_loss(vae, test_loader)
     print('  * init train recon loss: {:.10g};'.format(train_loss))
     print('  * init test recon loss: {:.10g};'.format(test_loss))
+
+    train_class_accuracy = eval_classification_accuracy(vae.classifier, train_loader_unlabeled)
+    test_class_accuracy = eval_classification_accuracy(vae.classifier, test_loader)
+
+    print('  * init train class accuracy: {:.4g};'.format(train_class_accuracy))
+    print('  * init test class accuracy: {:4g};'.format(test_class_accuracy))
 
     iter_array.append(0)
     train_loss_array.append(train_loss.detach().cpu().numpy())
     test_loss_array.append(test_loss.detach().cpu().numpy())
+    train_class_accuracy_array.append(train_class_accuracy.detach().cpu().numpy())
+    test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
 
     for epoch in range(1, n_epoch + 1):
         start_time = timeit.default_timer()
 
-        batch_loss = train_semi_supervised_loss(vae,
-                                train_loader_unlabeled,
-                                labeled_images, labels, optimizer, alpha,
+        _, unlabeled_loss = \
+                eval_semi_supervised_loss(vae, train_loader_unlabeled,
+                                labeled_images = labeled_images,
+                                labels = labels,
+                                optimizer = optimizer,
+                                train = True,
+                                alpha = alpha,
                                 reinforce = reinforce)
 
         elapsed = timeit.default_timer() - start_time
-        print('[{}] loss: {:.10g}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
+        print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
+                    epoch, unlabeled_loss, elapsed))
 
         if epoch % print_every == 0:
-            train_loss = vae.eval_vae(train_loader_unlabeled)
-            test_loss = vae.eval_vae(test_loader)
+            _, train_loss = eval_semi_supervised_loss(vae, train_loader_unlabeled)
+            _, test_loss = eval_semi_supervised_loss(vae, test_loader)
 
             print('  * train recon loss: {:.10g};'.format(train_loss))
             print('  * test recon loss: {:.10g};'.format(test_loss))
 
+            train_class_accuracy = eval_classification_accuracy(vae.classifier, train_loader_unlabeled)
+            test_class_accuracy = eval_classification_accuracy(vae.classifier, test_loader)
+
+            print('  * train class accuracy: {:.4g};'.format(train_class_accuracy))
+            print('  * test class accuracy: {:4g};'.format(test_class_accuracy))
+
             iter_array.append(epoch)
             train_loss_array.append(train_loss.detach().cpu().numpy())
             test_loss_array.append(test_loss.detach().cpu().numpy())
+            train_class_accuracy_array.append(train_class_accuracy.detach().cpu().numpy())
+            test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
 
         if epoch % save_every == 0:
             outfile_every = outfile + '_enc_epoch' + str(epoch)
@@ -533,8 +614,11 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         torch.save(vae.classifier.state_dict(), outfile_final)
 
 
-        loss_array = np.zeros((3, len(iter_array)))
+        loss_array = np.zeros((5, len(iter_array)))
         loss_array[0, :] = iter_array
         loss_array[1, :] = train_loss_array
         loss_array[2, :] = test_loss_array
+        loss_array[3, :] = train_class_accuracy_array
+        loss_array[4, :] = test_class_accuracy_array
+
         np.savetxt(outfile + 'loss_array.txt', loss_array)

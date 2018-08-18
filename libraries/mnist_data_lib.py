@@ -15,8 +15,10 @@ import numpy as np
 def load_mnist_data(data_dir = '../mnist_data/', train = True):
     assert os.path.exists(data_dir)
 
-    trans = transforms.Compose([transforms.ToTensor(),
-                                transforms.Normalize((0.5,), (1.0,))])
+    # trans = transforms.Compose([transforms.ToTensor(),
+    #                             transforms.Normalize((0.5,), (1.0,))])
+    
+    trans = lambda x: transforms.ToTensor()(x).bernoulli()
 
     data = dset.MNIST(root=data_dir, train=train,
                             transform=trans, download=True)
