@@ -525,7 +525,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     # define optimizer
     if train_classifier_only:
         # for debugging only
-        optimizer = optim.Adam(vae.classfier.parameters(), lr=lr,
+        optimizer = optim.Adam(vae.classifier.parameters(), lr=lr,
                                 weight_decay=weight_decay)
     else:
         optimizer = optim.Adam(vae.parameters(), lr=lr,

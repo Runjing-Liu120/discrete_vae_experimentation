@@ -148,7 +148,7 @@ if args.load_dec:
 
     vae.decoder.load_state_dict(torch.load(args.dec_init,
                                     map_location=lambda storage, loc: storage))
-if args.load_dec:
+if args.load_classifier:
     print('initializing classifier from ', args.classifier_init)
 
     vae.classifier.load_state_dict(torch.load(args.classifier_init,
