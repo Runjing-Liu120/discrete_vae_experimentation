@@ -229,7 +229,7 @@ class HandwritingVAE(nn.Module):
         ps_loss = 0.0
 
         if reinforce:
-            cat_rv = Categorical(probs = class_weights)
+            cat_rv = Categorical(probs = class_weights.detach())
             z_sample = cat_rv.sample().detach()
 
             # print('class_weights', class_weights[0, :])
@@ -519,11 +519,17 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                     outfile = './mnist_vae_semisupervised',
                     n_epoch = 200, print_every = 10, save_every = 20,
                     weight_decay = 1e-6, lr = 0.001,
-                    save_final_enc = True):
+                    save_final_enc = True,
+                    train_classifier_only = False):
 
     # define optimizer
-    optimizer = optim.Adam(vae.parameters(), lr=lr,
-                            weight_decay=weight_decay)
+    if train_classifier_only:
+        # for debugging only
+        optimizer = optim.Adam(vae.classfier.parameters(), lr=lr,
+                                weight_decay=weight_decay)
+    else:
+        optimizer = optim.Adam(vae.parameters(), lr=lr,
+                                weight_decay=weight_decay)
 
     iter_array = []
     train_loss_array = []
