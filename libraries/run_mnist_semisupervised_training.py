@@ -65,6 +65,8 @@ parser.add_argument('--load_classifier', type=distutils.util.strtobool, default=
                     help='whether to load classifier')
 parser.add_argument('--classifier_init', type = str,
                     help = 'file from which to load encoder')
+parser.add_argument('--train_classifier_only', type=distutils.util.strtobool, default='False',
+                    help = 'whether to train classifier')
 
 # Whether to just work with subset of data
 parser.add_argument('--propn_sample', type = float,
@@ -169,6 +171,7 @@ mnist_vae_lib.train_semisupervised_model(vae,
                     save_every = args.save_every,
                     weight_decay = args.weight_decay,
                     lr = args.learning_rate,
-                    reinforce = args.reinforce)
+                    reinforce = args.reinforce,
+                    train_classifier_only = args.train_classifier_only)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))
