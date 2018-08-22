@@ -32,12 +32,9 @@ class MLPEncoder(nn.Module):
         self.n_classes = n_classes
 
         # define the linear layers
-        self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 128) # 128 hidden nodes; two more layers
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, 128)
-        # self.fc4 = nn.Linear(128, self.n_pixels)
-        # self.fc5 = nn.Linear(self.n_pixels, latent_dim * 2)
-        self.fc4 = nn.Linear(128, latent_dim * 2)
+        self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 256) # 128 hidden nodes; two more layers
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, latent_dim * 2)
 
     def forward(self, image, z):
 
@@ -47,8 +44,8 @@ class MLPEncoder(nn.Module):
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
-        h = F.relu(self.fc3(h))
-        h = self.fc4(h)
+        h = self.fc3(h)
+        # h = self.fc4(h)
         # h = self.fc5(h)
 
         # get means, std, and class weights
@@ -76,8 +73,8 @@ class Classifier(nn.Module):
         self.n_pixels = slen ** 2
         self.n_classes = n_classes
 
-        self.fc1 = nn.Linear(self.n_pixels, 128)
-        self.fc2 = nn.Linear(128, n_classes - 1)
+        self.fc1 = nn.Linear(self.n_pixels, 256)
+        self.fc2 = nn.Linear(256, n_classes - 1)
 
     def forward(self, image):
         h = image.view(-1, self.n_pixels)
@@ -104,10 +101,8 @@ class MLPConditionalDecoder(nn.Module):
         self.slen = slen
 
         self.fc1 = nn.Linear(latent_dim + n_classes, 128)
-        # self.fc2 = nn.Linear(self.n_pixels, 128)
-        self.fc3 = nn.Linear(128, 128)
-        self.fc4 = nn.Linear(128, 128)
-        self.fc5 = nn.Linear(128, self.n_pixels)
+        self.fc2 = nn.Linear(128, 256)
+        self.fc3 = nn.Linear(256, self.n_pixels)
 
         self.sigmoid = nn.Sigmoid()
 
@@ -119,10 +114,8 @@ class MLPConditionalDecoder(nn.Module):
         h = torch.cat((latent_params, z), dim = 1)
 
         h = F.relu(self.fc1(h))
-        # h = F.relu(self.fc2(h))
-        h = F.relu(self.fc3(h))
-        h = F.relu(self.fc4(h))
-        h = self.fc5(h)
+        h = F.relu(self.fc2(h))
+        h = self.fc3(h)
 
         h = h.view(-1, self.slen, self.slen)
 
@@ -236,8 +229,11 @@ class HandwritingVAE(nn.Module):
         ps_loss = 0.0
 
         if reinforce:
-            cat_rv = Categorical(probs = class_weights)
+            cat_rv = Categorical(probs = class_weights.detach())
             z_sample = cat_rv.sample().detach()
+
+            # print('class_weights', class_weights[0, :])
+            # print('z_sample', z_sample)
 
         for z in range(self.n_classes):
             conditional_loss = self.get_conditional_loss(image, z)
@@ -260,6 +256,7 @@ class HandwritingVAE(nn.Module):
             kl_q_z = 0.0
         else:
             kl_q_z = -common_utils.get_multinomial_entropy(class_weights)
+
             # print('kl q z', kl_q_z / image.size()[0])
             if not np.isfinite(kl_q_z.detach().cpu().numpy()):
                 print(class_weights)
@@ -329,10 +326,10 @@ class HandwritingVAE(nn.Module):
         for batch_idx, data in enumerate(train_loader):
             # first entry of data is the actual image
             # the second entry is the true class label
-            if torch.cuda.is_available():
-                image = data['image'].to(device)
-            else:
-                image = data['image']
+            # if torch.cuda.is_available():
+            image = data['image'].to(device)
+            # else:
+            #     image = data['image']
 
             # i+=1; print('batch {}'.format(i))
 
@@ -445,12 +442,12 @@ def eval_classification_accuracy(classifier, loader):
 
     for batch_idx, data in enumerate(loader):
 
-        if torch.cuda.is_available():
-            image = data['image'].to(device)
-            label = data['label'].to(device)
-        else:
-            image = data['image']
-            label = data['label']
+        # if torch.cuda.is_available():
+        image = data['image'].to(device)
+        label = data['label'].to(device)
+        # else:
+        #     image = data['image']
+        #     label = data['label']
 
         class_weights = classifier(image)
 
@@ -480,13 +477,13 @@ def eval_semi_supervised_loss(vae, loader_unlabeled,
     i = 0
     for batch_idx, data in enumerate(loader_unlabeled):
 
-        if torch.cuda.is_available():
-            unlabeled_images = data['image'].to(device)
-            if labeled_images is not None:
-                labeled_images = labeled_images.to(device)
-                labels = labels.to(device)
-        else:
-            unlabeled_images = data['image']
+        # if torch.cuda.is_available():
+        unlabeled_images = data['image'].to(device)
+        if labeled_images is not None:
+            labeled_images = labeled_images.to(device)
+            labels = labels.to(device)
+        # else:
+        #     unlabeled_images = data['image']
 
         if optimizer is not None:
             optimizer.zero_grad()
@@ -522,11 +519,17 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                     outfile = './mnist_vae_semisupervised',
                     n_epoch = 200, print_every = 10, save_every = 20,
                     weight_decay = 1e-6, lr = 0.001,
-                    save_final_enc = True):
+                    save_final_enc = True,
+                    train_classifier_only = False):
 
     # define optimizer
-    optimizer = optim.Adam(vae.parameters(), lr=lr,
-                            weight_decay=weight_decay)
+    if train_classifier_only:
+        # for debugging only
+        optimizer = optim.Adam(vae.classifier.parameters(), lr=lr,
+                                weight_decay=weight_decay)
+    else:
+        optimizer = optim.Adam(vae.parameters(), lr=lr,
+                                weight_decay=weight_decay)
 
     iter_array = []
     train_loss_array = []

@@ -61,6 +61,12 @@ parser.add_argument('--load_dec', type=distutils.util.strtobool, default='False'
                     help='whether to load decoder')
 parser.add_argument('--dec_init', type = str,
                     help = 'file from which to load encoder')
+parser.add_argument('--load_classifier', type=distutils.util.strtobool, default='False',
+                    help='whether to load classifier')
+parser.add_argument('--classifier_init', type = str,
+                    help = 'file from which to load encoder')
+parser.add_argument('--train_classifier_only', type=distutils.util.strtobool, default='False',
+                    help = 'whether to train classifier')
 
 # Whether to just work with subset of data
 parser.add_argument('--propn_sample', type = float,
@@ -70,6 +76,8 @@ parser.add_argument('--propn_sample', type = float,
 # Other params
 parser.add_argument('--seed', type=int, default=4254,
                     help='random seed')
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 args = parser.parse_args()
 
@@ -81,6 +89,9 @@ def validate_args():
 
     if args.load_dec:
         assert os.path.isfile(args.dec_init)
+
+    if args.load_classifier:
+        assert os.path.isfile(args.classifier_init)
 
 validate_args()
 
@@ -126,7 +137,7 @@ n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
                             n_classes = n_classes,
                             slen = slen)
-vae.cuda()
+vae.to(device)
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)
 
@@ -137,6 +148,12 @@ if args.load_dec:
 
     vae.decoder.load_state_dict(torch.load(args.dec_init,
                                     map_location=lambda storage, loc: storage))
+if args.load_classifier:
+    print('initializing classifier from ', args.classifier_init)
+
+    vae.classifier.load_state_dict(torch.load(args.classifier_init,
+                                    map_location=lambda storage, loc: storage))
+
 
 print('training vae')
 
@@ -154,6 +171,7 @@ mnist_vae_lib.train_semisupervised_model(vae,
                     save_every = args.save_every,
                     weight_decay = args.weight_decay,
                     lr = args.learning_rate,
-                    reinforce = args.reinforce)
+                    reinforce = args.reinforce,
+                    train_classifier_only = args.train_classifier_only)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))
