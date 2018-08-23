@@ -207,7 +207,8 @@ class HandwritingVAE(nn.Module):
 
         return -loglik_z + kl_q_latent
 
-    def loss(self, image, true_class_labels = None, reinforce = False):
+    def loss(self, image, true_class_labels = None,
+                reinforce = False, baseline = False):
 
         # latent_means, latent_std, latent_samples, computed_class_weights = \
         #     self.encoder_forward(image)
@@ -240,11 +241,17 @@ class HandwritingVAE(nn.Module):
             loss += (class_weights[:, z] * conditional_loss).sum()
 
             if reinforce:
+                if baseline:
+                    # compute baseline here
+                    baseline = self.get_conditional_loss(image, z).detach()
+                else:
+                    baseline = 0.0
+
                 mask = np.zeros(len(z_sample))
                 mask[z_sample.cpu().numpy() == z] = 1
                 mask = torch.from_numpy(mask).float().to(device)
                 ps_loss += \
-                    (conditional_loss.detach() * \
+                    ((conditional_loss.detach()  - baseline)* \
                     torch.log(class_weights[:, z] + 1e-8) * mask.detach() + \
                     conditional_loss * mask).sum()
             else:
@@ -273,9 +280,12 @@ class HandwritingVAE(nn.Module):
 
     def get_semisupervised_loss(self, unlabeled_images, num_unlabeled_total,
                                     labeled_images = None, labels = None,
-                                    alpha = 1.0, reinforce = False):
+                                    alpha = 1.0, reinforce = False,
+                                    baseline = False):
 
-        unlabeled_loss, _, unlabeled_ps_loss = self.loss(unlabeled_images, reinforce = reinforce)
+        unlabeled_loss, _, unlabeled_ps_loss = \
+            self.loss(unlabeled_images, reinforce = reinforce,
+                                        baseline = baseline)
 
         if labeled_images is not None:
             assert labels is not None
@@ -462,7 +472,7 @@ def eval_classification_accuracy(classifier, loader):
 def eval_semi_supervised_loss(vae, loader_unlabeled,
                         labeled_images = None, labels = None,
                         optimizer = None, train = False,
-                        alpha = 1.0, reinforce = False):
+                        alpha = 1.0, reinforce = False, baseline = baseline):
     if train:
         vae.train()
         assert optimizer is not None
@@ -498,7 +508,8 @@ def eval_semi_supervised_loss(vae, loader_unlabeled,
                                             labeled_images = labeled_images,
                                             labels = labels,
                                             alpha = alpha,
-                                            reinforce = reinforce)
+                                            reinforce = reinforce,
+                                            baseline = baseline)
 
         if train:
             if reinforce:
