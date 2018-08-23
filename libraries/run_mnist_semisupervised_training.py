@@ -42,8 +42,8 @@ parser.add_argument('--alpha', type = float, default = 1.0,
 
 parser.add_argument('--reinforce', type=distutils.util.strtobool, default='False',
                     help='whether or not to use reinforce estimator')
-parser.add_argument('--baseline', type=distutils.util.strtobool, default='False',
-                    help='whether or not to add a baseline')
+parser.add_argument('--use_baseline', type=distutils.util.strtobool, default='False',
+                    help='whether or not to add a use_baseline')
 
 # saving encoder
 parser.add_argument('--outdir', type = str,
@@ -175,6 +175,6 @@ mnist_vae_lib.train_semisupervised_model(vae,
                     lr = args.learning_rate,
                     reinforce = args.reinforce,
                     train_classifier_only = args.train_classifier_only,
-                    baseline = args.baseline)
+                    use_baseline = args.use_baseline)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))
