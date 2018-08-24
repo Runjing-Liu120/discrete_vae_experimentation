@@ -74,13 +74,17 @@ class Classifier(nn.Module):
         self.n_classes = n_classes
 
         self.fc1 = nn.Linear(self.n_pixels, 256)
-        self.fc2 = nn.Linear(256, n_classes - 1)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 256)
+        self.fc4 = nn.Linear(256, n_classes - 1)
 
     def forward(self, image):
         h = image.view(-1, self.n_pixels)
 
         h = F.relu(self.fc1(h))
-        h = self.fc2(h)
+        h = F.relu(self.fc2(h))
+        h = F.relu(self.fc3(h))
+        h = self.fc4(h)
 
         return common_utils.get_symplex_from_reals(h)
 
