@@ -74,19 +74,41 @@ class Classifier(nn.Module):
         self.n_classes = n_classes
 
         self.fc1 = nn.Linear(self.n_pixels, 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 256)
-        self.fc4 = nn.Linear(256, n_classes - 1)
+        # self.fc2 = nn.Linear(256, 256)
+        # self.fc3 = nn.Linear(256, 256)
+        self.fc2 = nn.Linear(256, n_classes - 1)
 
     def forward(self, image):
         h = image.view(-1, self.n_pixels)
 
         h = F.relu(self.fc1(h))
-        h = F.relu(self.fc2(h))
-        h = F.relu(self.fc3(h))
-        h = self.fc4(h)
+        # h = F.relu(self.fc2(h))
+        # h = F.relu(self.fc3(h))
+        h = self.fc2(h)
 
         return common_utils.get_symplex_from_reals(h)
+
+class BaselineLearner(nn.Module):
+    def __init__(self, slen = 28):
+        """
+        Single hidden layer classifier
+        with softmax output.
+        """
+        super(BaselineLearner, self).__init__()
+
+        self.slen = slen
+        self.n_pixels = slen ** 2
+
+        self.fc1 = nn.Linear(self.n_pixels, 256)
+        self.fc2 = nn.Linear(256, 1)
+
+    def forward(self, image):
+        h = image.view(-1, self.n_pixels)
+
+        h = F.relu(self.fc1(h))
+        h = self.fc2(h)
+
+        return h
 
 class MLPConditionalDecoder(nn.Module):
     def __init__(self, latent_dim = 5,
@@ -133,7 +155,8 @@ class HandwritingVAE(nn.Module):
 
     def __init__(self, latent_dim = 5,
                     n_classes = 10,
-                    slen = 28):
+                    slen = 28,
+                    use_baseline = False):
 
         super(HandwritingVAE, self).__init__()
 
@@ -149,6 +172,10 @@ class HandwritingVAE(nn.Module):
         self.decoder = MLPConditionalDecoder(latent_dim = latent_dim,
                                                 n_classes = n_classes,
                                                 slen = slen)
+
+        self.use_baseline = use_baseline
+        if self.use_baseline:
+            self.baseline_learner = BaselineLearner(slen = self.slen)
 
     def encoder_forward(self, image, one_hot_z):
         assert one_hot_z.shape[0] == image.shape[0]
@@ -212,7 +239,7 @@ class HandwritingVAE(nn.Module):
         return -loglik_z + kl_q_latent
 
     def loss(self, image, true_class_labels = None,
-                reinforce = False, use_baseline = False):
+                reinforce = False):
 
         # latent_means, latent_std, latent_samples, computed_class_weights = \
         #     self.encoder_forward(image)
@@ -237,11 +264,13 @@ class HandwritingVAE(nn.Module):
             cat_rv = Categorical(probs = class_weights.detach())
             z_sample = cat_rv.sample().detach()
 
-            if use_baseline:
+            if self.use_baseline:
                 # compute baseline here.
                 # draw a second sample for the baseline
-                z_sample_bs = cat_rv.sample().float()
-                baseline = self.get_conditional_loss(image, z_sample_bs).detach()
+                # z_sample_bs = cat_rv.sample().float()
+                # baseline = self.get_conditional_loss(image, z_sample_bs).detach()
+
+                baseline = self.baseline_learner(image)
             else:
                 baseline = 0.0
 
@@ -260,6 +289,8 @@ class HandwritingVAE(nn.Module):
                     ((conditional_loss.detach()  - baseline) * \
                     torch.log(class_weights[:, z] + 1e-8) * mask + \
                     conditional_loss * mask).sum()
+                if self.use_baseline:
+                    ps_loss += ((conditional_loss.detach() - baseline)**2).sum()
             else:
                 ps_loss = None
 
@@ -286,12 +317,10 @@ class HandwritingVAE(nn.Module):
 
     def get_semisupervised_loss(self, unlabeled_images, num_unlabeled_total,
                                     labeled_images = None, labels = None,
-                                    alpha = 1.0, reinforce = False,
-                                    use_baseline = False):
+                                    alpha = 1.0, reinforce = False):
 
         unlabeled_loss, _, unlabeled_ps_loss = \
-            self.loss(unlabeled_images, reinforce = reinforce,
-                                        use_baseline = use_baseline)
+            self.loss(unlabeled_images, reinforce = reinforce)
 
         if labeled_images is not None:
             assert labels is not None
@@ -478,8 +507,7 @@ def eval_classification_accuracy(classifier, loader):
 def eval_semi_supervised_loss(vae, loader_unlabeled,
                         labeled_images = None, labels = None,
                         optimizer = None, train = False,
-                        alpha = 1.0, reinforce = False,
-                        use_baseline = False):
+                        alpha = 1.0, reinforce = False):
     if train:
         vae.train()
         assert optimizer is not None
@@ -515,8 +543,7 @@ def eval_semi_supervised_loss(vae, loader_unlabeled,
                                             labeled_images = labeled_images,
                                             labels = labels,
                                             alpha = alpha,
-                                            reinforce = reinforce,
-                                            use_baseline = use_baseline)
+                                            reinforce = reinforce)
 
         if train:
             if reinforce:
@@ -538,7 +565,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                     n_epoch = 200, print_every = 10, save_every = 20,
                     weight_decay = 1e-6, lr = 0.001,
                     save_final_enc = True,
-                    train_classifier_only = False, use_baseline = False):
+                    train_classifier_only = False):
 
     # define optimizer
     if train_classifier_only:
@@ -582,7 +609,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                                 optimizer = optimizer,
                                 train = True,
                                 alpha = alpha,
-                                reinforce = reinforce, use_baseline = use_baseline)
+                                reinforce = reinforce)
 
         elapsed = timeit.default_timer() - start_time
         print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
