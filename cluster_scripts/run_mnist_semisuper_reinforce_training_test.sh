@@ -3,7 +3,7 @@
 python ../libraries/run_mnist_semisupervised_training.py \
 			--epochs 80 \
 			--save_every 100000 \
-			--batch_size 64 \
+			--batch_size 256 \
 			--propn_sample 1.0 \
 			--seed 901 \
 			--outfilename '../mnist_vae_results_aws/reinforce_classifier_warmstart' \
