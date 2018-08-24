@@ -243,7 +243,7 @@ class HandwritingVAE(nn.Module):
             if reinforce:
                 if use_baseline:
                     # compute use_baseline here
-                    baseline = self.get_conditional_loss(image, z).detach()
+                    baseline = 1000.0 # self.get_conditional_loss(image, z).detach()
                 else:
                     baseline = 0.0
 
@@ -532,7 +532,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                     n_epoch = 200, print_every = 10, save_every = 20,
                     weight_decay = 1e-6, lr = 0.001,
                     save_final_enc = True,
-                    train_classifier_only = False):
+                    train_classifier_only = False, use_baseline = False):
 
     # define optimizer
     if train_classifier_only:
@@ -576,7 +576,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                                 optimizer = optimizer,
                                 train = True,
                                 alpha = alpha,
-                                reinforce = reinforce)
+                                reinforce = reinforce, use_baseline = use_baseline)
 
         elapsed = timeit.default_timer() - start_time
         print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
