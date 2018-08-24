@@ -233,6 +233,14 @@ class HandwritingVAE(nn.Module):
             cat_rv = Categorical(probs = class_weights.detach())
             z_sample = cat_rv.sample().detach()
 
+            if use_baseline:
+                # compute baseline here.
+                # draw a second sample for the baseline
+                z_sample_bs = cat_rv.sample().float()
+                baseline = self.get_conditional_loss(image, z_sample_bs).detach()
+            else:
+                baseline = 0.0
+
             # print('class_weights', class_weights[0, :])
             # print('z_sample', z_sample)
 
@@ -241,18 +249,12 @@ class HandwritingVAE(nn.Module):
             loss += (class_weights[:, z] * conditional_loss).sum()
 
             if reinforce:
-                if use_baseline:
-                    # compute use_baseline here
-                    baseline = self.get_conditional_loss(image, z).detach()
-                else:
-                    baseline = 0.0
-
                 mask = np.zeros(len(z_sample))
                 mask[z_sample.cpu().numpy() == z] = 1
-                mask = torch.from_numpy(mask).float().to(device)
+                mask = torch.from_numpy(mask).float().to(device).detach()
                 ps_loss += \
                     ((conditional_loss.detach()  - baseline) * \
-                    torch.log(class_weights[:, z] + 1e-8) * mask.detach() + \
+                    torch.log(class_weights[:, z] + 1e-8) * mask + \
                     conditional_loss * mask).sum()
             else:
                 ps_loss = None
