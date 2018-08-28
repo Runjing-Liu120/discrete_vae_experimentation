@@ -138,7 +138,7 @@ latent_dim = args.latent_dim
 n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
                             n_classes = n_classes,
-                            slen = slen)
+                            slen = slen, use_baseline = args.use_baseline)
 vae.to(device)
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)
@@ -174,7 +174,6 @@ mnist_vae_lib.train_semisupervised_model(vae,
                     weight_decay = args.weight_decay,
                     lr = args.learning_rate,
                     reinforce = args.reinforce,
-                    train_classifier_only = args.train_classifier_only,
-                    use_baseline = args.use_baseline)
+                    train_classifier_only = args.train_classifier_only)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))
