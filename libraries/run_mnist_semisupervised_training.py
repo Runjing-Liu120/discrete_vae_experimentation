@@ -42,6 +42,8 @@ parser.add_argument('--alpha', type = float, default = 1.0,
 
 parser.add_argument('--reinforce', type=distutils.util.strtobool, default='False',
                     help='whether or not to use reinforce estimator')
+parser.add_argument('--use_baseline', type=distutils.util.strtobool, default='False',
+                    help='whether or not to add a use_baseline')
 
 # saving encoder
 parser.add_argument('--outdir', type = str,
@@ -136,7 +138,7 @@ latent_dim = args.latent_dim
 n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
                             n_classes = n_classes,
-                            slen = slen)
+                            slen = slen, use_baseline = args.use_baseline)
 vae.to(device)
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)
