@@ -398,86 +398,86 @@ class HandwritingVAE(nn.Module):
 
         return avg_loss
 
-    def train_module(self, train_loader, test_loader,
-                    set_true_class_label = False,
-                    outfile = './mnist_vae',
-                    n_epoch = 200, print_every = 10, save_every = 20,
-                    weight_decay = 1e-6, lr = 0.001,
-                    save_final_enc = True):
-
-        optimizer = optim.Adam([
-                {'params': model.classifier.parameters(), 'lr': lr},
-                {'params': model.encoder.parameters(), 'lr': lr * 1e-2},
-                {'params': model.decoder.parameters(), 'lr': lr * 1e-2}],
-                weight_decay=weight_decay)
-
-        iter_array = []
-        train_loss_array = []
-        test_loss_array = []
-
-        train_loss = self.eval_vae(train_loader, set_true_class_label = set_true_class_label)
-        test_loss = self.eval_vae(test_loader, set_true_class_label = set_true_class_label)
-        print('  * init train recon loss: {:.10g};'.format(train_loss))
-        print('  * init test recon loss: {:.10g};'.format(test_loss))
-
-        iter_array.append(0)
-        train_loss_array.append(train_loss.detach().cpu().numpy())
-        test_loss_array.append(test_loss.detach().cpu().numpy())
-
-        for epoch in range(1, n_epoch + 1):
-            start_time = timeit.default_timer()
-
-            batch_loss = self.eval_vae(train_loader,
-                                        optimizer = optimizer,
-                                        train = True,
-                                        set_true_class_label = set_true_class_label)
-
-            elapsed = timeit.default_timer() - start_time
-            print('[{}] loss: {:.10g}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
-
-            if epoch % print_every == 0:
-                train_loss = self.eval_vae(train_loader, set_true_class_label = set_true_class_label)
-                test_loss = self.eval_vae(test_loader, set_true_class_label = set_true_class_label)
-
-                print('  * train recon loss: {:.10g};'.format(train_loss))
-                print('  * test recon loss: {:.10g};'.format(test_loss))
-
-                iter_array.append(epoch)
-                train_loss_array.append(train_loss.detach().cpu().numpy())
-                test_loss_array.append(test_loss.detach().cpu().numpy())
-
-            if epoch % save_every == 0:
-                outfile_every = outfile + '_enc_epoch' + str(epoch)
-                print("writing the encoder parameters to " + outfile_every + '\n')
-                torch.save(self.encoder.state_dict(), outfile_every)
-
-                outfile_every = outfile + '_dec_epoch' + str(epoch)
-                print("writing the decoder parameters to " + outfile_every + '\n')
-                torch.save(self.decoder.state_dict(), outfile_every)
-
-                outfile_every = outfile + '_classifier_epoch' + str(epoch)
-                print("writing the classifier parameters to " + outfile_every + '\n')
-                torch.save(vae.classifier.state_dict(), outfile_every)
-
-
-        if save_final_enc:
-            outfile_final = outfile + '_enc_final'
-            print("writing the encoder parameters to " + outfile_final + '\n')
-            torch.save(self.encoder.state_dict(), outfile_final)
-
-            outfile_final = outfile + '_dec_final'
-            print("writing the decoder parameters to " + outfile_final + '\n')
-            torch.save(self.decoder.state_dict(), outfile_final)
-
-            outfile_final = outfile + '_classifier_final'
-            print("writing the classifier parameters to " + outfile_final + '\n')
-            torch.save(vae.classifier.state_dict(), outfile_final)
-
-            loss_array = np.zeros((3, len(iter_array)))
-            loss_array[0, :] = iter_array
-            loss_array[1, :] = train_loss_array
-            loss_array[2, :] = test_loss_array
-            np.savetxt(outfile + 'loss_array.txt', loss_array)
+    # def train_module(self, train_loader, test_loader,
+    #                 set_true_class_label = False,
+    #                 outfile = './mnist_vae',
+    #                 n_epoch = 200, print_every = 10, save_every = 20,
+    #                 weight_decay = 1e-6, lr = 0.001,
+    #                 save_final_enc = True):
+    #
+    #     optimizer = optim.Adam([
+    #             {'params': model.classifier.parameters(), 'lr': lr},
+    #             {'params': model.encoder.parameters(), 'lr': lr * 1e-2},
+    #             {'params': model.decoder.parameters(), 'lr': lr * 1e-2}],
+    #             weight_decay=weight_decay)
+    #
+    #     iter_array = []
+    #     train_loss_array = []
+    #     test_loss_array = []
+    #
+    #     train_loss = self.eval_vae(train_loader, set_true_class_label = set_true_class_label)
+    #     test_loss = self.eval_vae(test_loader, set_true_class_label = set_true_class_label)
+    #     print('  * init train recon loss: {:.10g};'.format(train_loss))
+    #     print('  * init test recon loss: {:.10g};'.format(test_loss))
+    #
+    #     iter_array.append(0)
+    #     train_loss_array.append(train_loss.detach().cpu().numpy())
+    #     test_loss_array.append(test_loss.detach().cpu().numpy())
+    #
+    #     for epoch in range(1, n_epoch + 1):
+    #         start_time = timeit.default_timer()
+    #
+    #         batch_loss = self.eval_vae(train_loader,
+    #                                     optimizer = optimizer,
+    #                                     train = True,
+    #                                     set_true_class_label = set_true_class_label)
+    #
+    #         elapsed = timeit.default_timer() - start_time
+    #         print('[{}] loss: {:.10g}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
+    #
+    #         if epoch % print_every == 0:
+    #             train_loss = self.eval_vae(train_loader, set_true_class_label = set_true_class_label)
+    #             test_loss = self.eval_vae(test_loader, set_true_class_label = set_true_class_label)
+    #
+    #             print('  * train recon loss: {:.10g};'.format(train_loss))
+    #             print('  * test recon loss: {:.10g};'.format(test_loss))
+    #
+    #             iter_array.append(epoch)
+    #             train_loss_array.append(train_loss.detach().cpu().numpy())
+    #             test_loss_array.append(test_loss.detach().cpu().numpy())
+    #
+    #         if epoch % save_every == 0:
+    #             outfile_every = outfile + '_enc_epoch' + str(epoch)
+    #             print("writing the encoder parameters to " + outfile_every + '\n')
+    #             torch.save(self.encoder.state_dict(), outfile_every)
+    #
+    #             outfile_every = outfile + '_dec_epoch' + str(epoch)
+    #             print("writing the decoder parameters to " + outfile_every + '\n')
+    #             torch.save(self.decoder.state_dict(), outfile_every)
+    #
+    #             outfile_every = outfile + '_classifier_epoch' + str(epoch)
+    #             print("writing the classifier parameters to " + outfile_every + '\n')
+    #             torch.save(vae.classifier.state_dict(), outfile_every)
+    #
+    #
+    #     if save_final_enc:
+    #         outfile_final = outfile + '_enc_final'
+    #         print("writing the encoder parameters to " + outfile_final + '\n')
+    #         torch.save(self.encoder.state_dict(), outfile_final)
+    #
+    #         outfile_final = outfile + '_dec_final'
+    #         print("writing the decoder parameters to " + outfile_final + '\n')
+    #         torch.save(self.decoder.state_dict(), outfile_final)
+    #
+    #         outfile_final = outfile + '_classifier_final'
+    #         print("writing the classifier parameters to " + outfile_final + '\n')
+    #         torch.save(vae.classifier.state_dict(), outfile_final)
+    #
+    #         loss_array = np.zeros((3, len(iter_array)))
+    #         loss_array[0, :] = iter_array
+    #         loss_array[1, :] = train_loss_array
+    #         loss_array[2, :] = test_loss_array
+    #         np.savetxt(outfile + 'loss_array.txt', loss_array)
 
 
 ######################################
@@ -573,11 +573,31 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     # define optimizer
     if train_classifier_only:
         # for debugging only
-        optimizer = optim.Adam(vae.classifier.parameters(), lr=lr,
-                                weight_decay=weight_decay)
+        optimizer = optim.Adam([
+                {'params': vae.classifier.parameters(), 'lr': lr}],
+                weight_decay=weight_decay)
+
+        if vae.use_baseline:
+            optimizer = optim.Adam([
+                    {'params': vae.classifier.parameters(), 'lr': lr},
+                    {'params': vae.baseline_learner.parameters(), 'lr': lr}],
+                    weight_decay=weight_decay)
+
     else:
-        optimizer = optim.Adam(vae.parameters(), lr=lr,
-                                weight_decay=weight_decay)
+        optimizer = optim.Adam([
+                {'params': vae.classifier.parameters(), 'lr': lr},
+                {'params': vae.encoder.parameters(), 'lr': lr * 1e-2},
+                {'params': vae.decoder.parameters(), 'lr': lr * 1e-2}],
+                weight_decay=weight_decay)
+
+        if vae.use_baseline:
+            optimizer = optim.Adam([
+                    {'params': vae.classifier.parameters(), 'lr': lr},
+                    {'params': vae.encoder.parameters(), 'lr': lr * 1e-2},
+                    {'params': vae.decoder.parameters(), 'lr': lr * 1e-2},
+                    {'params': vae.baseline_learner.parameters(), 'lr': lr}],
+                    weight_decay=weight_decay)
+
 
     iter_array = []
     train_loss_array = []
