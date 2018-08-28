@@ -286,7 +286,7 @@ class HandwritingVAE(nn.Module):
                 mask[z_sample.cpu().numpy() == z] = 1
                 mask = torch.from_numpy(mask).float().to(device).detach()
                 ps_loss += \
-                    ((conditional_loss.detach()  - baseline) * \
+                    ((conditional_loss.detach()  - baseline.detach()) * \
                     torch.log(class_weights[:, z] + 1e-8) * mask + \
                     conditional_loss * mask).sum()
                 if self.use_baseline:
