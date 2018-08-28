@@ -10,5 +10,6 @@ python ../libraries/run_mnist_semisupervised_training.py \
 			--propn_labeled 0.1 \
 			--reinforce True \
 			--use_baseline True \
-			--latent_dim 32 
+			--latent_dim 32\
+			--learning_rate 1e-3 
 

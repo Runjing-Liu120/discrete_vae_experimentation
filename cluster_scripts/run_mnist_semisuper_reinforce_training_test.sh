@@ -19,5 +19,5 @@ python ../libraries/run_mnist_semisupervised_training.py \
 			--dec_init '../saved_vae_results/mnist_vae_semisuper_dec_final' \
 			--classifier_init '../mnist_vae_results_aws/reinforce_classifier_warmstart_classifier_final'\
                         --train_classifier_only True \
-			--learning_rate 1e-4
+			--learning_rate 1e-3
 
