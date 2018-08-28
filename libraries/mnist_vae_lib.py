@@ -238,8 +238,30 @@ class HandwritingVAE(nn.Module):
 
         return -loglik_z + kl_q_latent
 
+    def _sample_class_weights(class_weights, num_reinforced):
+        # sample z indices, but only for those not in the top k (num_reinforced)
+        # class weights
+        # TODO: test this
+        
+        class_weights_topk, class_weights_topk_indx = \
+            torch.topk(-class_weights, num_reinforced)
+
+        class_weight_sample = torch.zeros(class_weights.shape)
+        seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])])
+
+        for i in range(num_reinforced):
+            class_weight_sample[seq_tensor, class_weights_topk_indx[:, i]] = \
+                class_weights_topk[:, i]
+
+        class_weight_sample /= class_weight_sample.sum(dim = 1, keepdim=True)
+
+        cat_rv = Categorical(probs = class_weight_sample.detach())
+        z_sample = cat_rv.sample().detach()
+
+        return z_sample
+
     def loss(self, image, true_class_labels = None,
-                reinforce = False):
+                    num_reinforced = 10):
 
         # latent_means, latent_std, latent_samples, computed_class_weights = \
         #     self.encoder_forward(image)
@@ -260,9 +282,6 @@ class HandwritingVAE(nn.Module):
         loss = 0.0
         ps_loss = 0.0
 
-        if reinforce:
-            cat_rv = Categorical(probs = class_weights.detach())
-            z_sample = cat_rv.sample().detach()
 
             if self.use_baseline:
                 # compute baseline here.
