@@ -405,8 +405,11 @@ class HandwritingVAE(nn.Module):
                     weight_decay = 1e-6, lr = 0.001,
                     save_final_enc = True):
 
-        optimizer = optim.Adam(self.parameters(), lr=lr,
-                                weight_decay=weight_decay)
+        optimizer = optim.Adam([
+                {'params': model.classifier.parameters(), 'lr': lr},
+                {'params': model.encoder.parameters(), 'lr': lr * 1e-2},
+                {'params': model.decoder.parameters(), 'lr': lr * 1e-2}],
+                weight_decay=weight_decay)
 
         iter_array = []
         train_loss_array = []
