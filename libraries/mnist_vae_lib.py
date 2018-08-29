@@ -297,9 +297,11 @@ class HandwritingVAE(nn.Module):
         ps_loss = 0.0
 
         if num_reinforced > 0:
+            class_weights_ = class_weights.detach() + 1e-3
+            class_weights_ /= class_weights.sum(dim = 1)
             z_sample, z_sample_domain, class_weight_sample_conditional, \
                         unsampled_z_domain, unsampled_weights = \
-                        self._sample_class_weights(class_weights.detach(),
+                        self._sample_class_weights(class_weights_,
                                                     num_reinforced)
 
         if self.use_baseline:
