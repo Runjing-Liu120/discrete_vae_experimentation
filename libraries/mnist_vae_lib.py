@@ -74,15 +74,20 @@ class Classifier(nn.Module):
         self.n_classes = n_classes
 
         self.fc1 = nn.Linear(self.n_pixels, 256)
-        self.fc2 = nn.Linear(256, n_classes - 1)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 256)
+        self.fc4 = nn.Linear(256, n_classes)
+
 
     def forward(self, image):
         h = image.view(-1, self.n_pixels)
 
         h = F.relu(self.fc1(h))
-        h = self.fc2(h)
+        h = F.relu(self.fc2(h))
+        h = F.relu(self.fc3(h))
+        h = self.fc4(h)
 
-        return common_utils.get_symplex_from_reals(h)
+        return F.softmax(h, dim = 1)
 
 class MLPConditionalDecoder(nn.Module):
     def __init__(self, latent_dim = 5,
@@ -423,7 +428,7 @@ class HandwritingVAE(nn.Module):
 
             outfile_final = outfile + '_classifier_final'
             print("writing the classifier parameters to " + outfile_final + '\n')
-            torch.save(vae.classifier.state_dict(), outfile_final)
+            torch.save(self.classifier.state_dict(), outfile_final)
 
             loss_array = np.zeros((3, len(iter_array)))
             loss_array[0, :] = iter_array
