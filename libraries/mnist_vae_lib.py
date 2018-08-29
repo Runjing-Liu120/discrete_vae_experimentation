@@ -254,7 +254,7 @@ class HandwritingVAE(nn.Module):
                                         class_weights.shape[1] - num_reinforced)
             unsampled_weight = unsampled_weight.sum(dim = 1)
         else:
-            unsampled_z_domain = torch.Tensor([]).to(device)
+            unsampled_z_domain = -torch.ones((class_weights.shape[0], 1)).to(device)
             unsampled_weight = torch.zeros(class_weights.shape[0]).to(device)
 
         class_weight_sample_conditional = torch.zeros(class_weights.shape).to(device)
@@ -322,7 +322,7 @@ class HandwritingVAE(nn.Module):
             if num_reinforced > 0:
                 # if its not sampled, just use class weights
                 mask_unsample = np.zeros(len(z_sample))
-                mask_unsample[unsampled_z_domain.cpu().numpy() == z] = 1
+                mask_unsample[(unsampled_z_domain.cpu().numpy() == z).sum(axis = 1)] = 1
                 mask_unsample = torch.from_numpy(mask_unsample).float().to(device).detach()
                 ps_loss += (class_weights[:, z] * conditional_loss * mask_unsample).sum()
 
