@@ -254,21 +254,21 @@ class HandwritingVAE(nn.Module):
                                         class_weights.shape[1] - num_reinforced)
             unsampled_weight = unsampled_weight.sum(dim = 1)
         else:
-            unsampled_z_domain = torch.Tensor([])
-            unsampled_weight = torch.zeros(class_weights.shape[0])
+            unsampled_z_domain = torch.Tensor([]).to(device)
+            unsampled_weight = torch.zeros(class_weights.shape[0]).to(device)
 
-        class_weight_sample_conditional = torch.zeros(class_weights.shape)
-        seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])])
+        class_weight_sample_conditional = torch.zeros(class_weights.shape).to(device)
+        seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])]).to(device)
 
         for i in range(num_reinforced):
             class_weight_sample_conditional[seq_tensor, \
-                z_sample_domain[:, i]] = \
-                class_weights_topk[:, i]
+                z_sample_domain[:, i].detach()] = \
+                class_weights_topk[:, i].detach()
 
         class_weight_sample_conditional /= \
             class_weight_sample_conditional.sum(dim = 1, keepdim=True)
 
-        cat_rv = Categorical(probs = class_weight_sample_conditional.detach())
+        cat_rv = Categorical(probs = class_weight_sample_conditional)
         z_sample = cat_rv.sample().detach()
 
         return z_sample, z_sample_domain, class_weight_sample_conditional, \
