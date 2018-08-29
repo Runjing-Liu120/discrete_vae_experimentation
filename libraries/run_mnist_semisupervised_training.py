@@ -40,8 +40,10 @@ parser.add_argument('--propn_labeled', type = float, default = 0.1,
 parser.add_argument('--alpha', type = float, default = 1.0,
                     help = 'weight of cross_entropy_term')
 
-parser.add_argument('--reinforce', type=distutils.util.strtobool, default='False',
-                    help='whether or not to use reinforce estimator')
+parser.add_argument('--num_reinforced', type=int, default=0,
+                    help='number of weights to sample for reinforce')
+parser.add_argument('--use_baseline', type=distutils.util.strtobool, default='False',
+                    help='whether or not to add a use_baseline')
 
 # saving encoder
 parser.add_argument('--outdir', type = str,
@@ -136,7 +138,7 @@ latent_dim = args.latent_dim
 n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
                             n_classes = n_classes,
-                            slen = slen)
+                            slen = slen, use_baseline = args.use_baseline)
 vae.to(device)
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)
@@ -171,7 +173,7 @@ mnist_vae_lib.train_semisupervised_model(vae,
                     save_every = args.save_every,
                     weight_decay = args.weight_decay,
                     lr = args.learning_rate,
-                    reinforce = args.reinforce,
+                    num_reinforced = args.num_reinforced,
                     train_classifier_only = args.train_classifier_only)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))

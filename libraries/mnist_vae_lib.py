@@ -78,7 +78,6 @@ class Classifier(nn.Module):
         self.fc3 = nn.Linear(256, 256)
         self.fc4 = nn.Linear(256, n_classes)
 
-
     def forward(self, image):
         h = image.view(-1, self.n_pixels)
 
@@ -88,6 +87,28 @@ class Classifier(nn.Module):
         h = self.fc4(h)
 
         return F.softmax(h, dim = 1)
+
+class BaselineLearner(nn.Module):
+    def __init__(self, slen = 28):
+        """
+        Single hidden layer classifier
+        with softmax output.
+        """
+        super(BaselineLearner, self).__init__()
+
+        self.slen = slen
+        self.n_pixels = slen ** 2
+
+        self.fc1 = nn.Linear(self.n_pixels, 256)
+        self.fc2 = nn.Linear(256, 1)
+
+    def forward(self, image):
+        h = image.view(-1, self.n_pixels)
+
+        h = F.relu(self.fc1(h))
+        h = self.fc2(h)
+
+        return h
 
 class MLPConditionalDecoder(nn.Module):
     def __init__(self, latent_dim = 5,
@@ -134,7 +155,8 @@ class HandwritingVAE(nn.Module):
 
     def __init__(self, latent_dim = 5,
                     n_classes = 10,
-                    slen = 28):
+                    slen = 28,
+                    use_baseline = False):
 
         super(HandwritingVAE, self).__init__()
 
@@ -150,6 +172,10 @@ class HandwritingVAE(nn.Module):
         self.decoder = MLPConditionalDecoder(latent_dim = latent_dim,
                                                 n_classes = n_classes,
                                                 slen = slen)
+
+        self.use_baseline = use_baseline
+        if self.use_baseline:
+            self.baseline_learner = BaselineLearner(slen = self.slen)
 
     def encoder_forward(self, image, one_hot_z):
         assert one_hot_z.shape[0] == image.shape[0]
@@ -212,7 +238,44 @@ class HandwritingVAE(nn.Module):
 
         return -loglik_z + kl_q_latent
 
-    def loss(self, image, true_class_labels = None, reinforce = False):
+    def _sample_class_weights(self, class_weights, num_reinforced):
+        # sample z indices, but only for those with k the smallest
+        # smallest class weights (k = num_reinforced)
+
+        assert num_reinforced <= class_weights.shape[1]
+
+        # get the k smallest weights, and the indices to which they correspond
+        class_weights_topk, z_sample_domain = \
+            torch.topk(-class_weights, num_reinforced)
+
+        # in the future, we also need the indices not sampled
+        if not num_reinforced == class_weights.shape[1]:
+            unsampled_weight, unsampled_z_domain = torch.topk(class_weights, \
+                                        class_weights.shape[1] - num_reinforced)
+            unsampled_weight = unsampled_weight.sum(dim = 1)
+        else:
+            unsampled_z_domain = -torch.ones((class_weights.shape[0], 1)).to(device)
+            unsampled_weight = torch.zeros(class_weights.shape[0]).to(device)
+
+        class_weight_sample_conditional = torch.zeros(class_weights.shape).to(device)
+        seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])]).to(device)
+
+        for i in range(num_reinforced):
+            class_weight_sample_conditional[seq_tensor, \
+                z_sample_domain[:, i].detach()] = \
+                class_weights_topk[:, i].detach()
+
+        class_weight_sample_conditional /= \
+            class_weight_sample_conditional.sum(dim = 1, keepdim=True)
+
+        cat_rv = Categorical(probs = class_weight_sample_conditional)
+        z_sample = cat_rv.sample().detach()
+
+        return z_sample, z_sample_domain, class_weight_sample_conditional, \
+                    unsampled_z_domain, unsampled_weight
+
+    def loss(self, image, true_class_labels = None,
+                    num_reinforced = 0):
 
         # latent_means, latent_std, latent_samples, computed_class_weights = \
         #     self.encoder_forward(image)
@@ -233,9 +296,23 @@ class HandwritingVAE(nn.Module):
         loss = 0.0
         ps_loss = 0.0
 
-        if reinforce:
-            cat_rv = Categorical(probs = class_weights.detach())
-            z_sample = cat_rv.sample().detach()
+        if num_reinforced > 0:
+            class_weights_ = class_weights.detach() + 1e-3
+            class_weights_ /= class_weights_.sum(dim = 1, keepdim = True)
+            z_sample, z_sample_domain, class_weight_sample_conditional, \
+                        unsampled_z_domain, unsampled_weights = \
+                        self._sample_class_weights(class_weights_,
+                                                    num_reinforced)
+
+        if self.use_baseline:
+            # compute baseline here.
+            # draw a second sample for the baseline
+            # z_sample_bs = cat_rv.sample().float()
+            # baseline = self.get_conditional_loss(image, z_sample_bs).detach()
+
+            baseline = self.baseline_learner(image)
+        else:
+            baseline = 0.0
 
             # print('class_weights', class_weights[0, :])
             # print('z_sample', z_sample)
@@ -244,16 +321,37 @@ class HandwritingVAE(nn.Module):
             conditional_loss = self.get_conditional_loss(image, z)
             loss += (class_weights[:, z] * conditional_loss).sum()
 
-            if reinforce:
-                mask = np.zeros(len(z_sample))
-                mask[z_sample.cpu().numpy() == z] = 1
-                mask = torch.from_numpy(mask).float().to(device)
-                ps_loss += \
-                    (conditional_loss.detach() * \
-                    torch.log(class_weights[:, z] + 1e-8) * mask.detach() + \
-                    conditional_loss * mask).sum()
+            if num_reinforced > 0:
+                # if its not sampled, just use class weights
+                mask_unsample = np.zeros(len(z_sample))
+                mask_unsample[(unsampled_z_domain.cpu().numpy() == z).sum(axis = 1)] = 1
+                mask_unsample = torch.from_numpy(mask_unsample).float().to(device).detach()
+                ps_loss += (class_weights[:, z] * conditional_loss * mask_unsample).sum()
+
+                # if its in the reinforce sample, use the sample
+                mask_sample = np.zeros(len(z_sample))
+                mask_sample[z_sample.cpu().numpy() == z] = 1
+                mask_sample = torch.from_numpy(mask_sample).float().to(device).detach()
+
+                # grad q term
+                grad_q = (conditional_loss.detach()  - baseline.detach()) * \
+                    torch.log(class_weights[:, z] + 1e-8) * mask_sample
+
+                grad_l = conditional_loss * mask_sample
+
+                ps_loss += ((1 - unsampled_weights) * (grad_q + grad_l)).sum()
+
+                # ps_loss += (1 - unsampled_weights) * \
+                #     ((conditional_loss.detach()  - baseline.detach()) * \
+                #     torch.log(class_weights[:, z] + 1e-8) * mask_sample + \
+                #     conditional_loss * mask_sample).sum()
+
+                if self.use_baseline:
+                    ps_loss += ((conditional_loss.detach() - baseline)**2).sum()
+
             else:
-                ps_loss = None
+                ps_loss = loss
+
 
         # kl term for class weights
         # (assuming uniform prior)
@@ -278,14 +376,15 @@ class HandwritingVAE(nn.Module):
 
     def get_semisupervised_loss(self, unlabeled_images, num_unlabeled_total,
                                     labeled_images = None, labels = None,
-                                    alpha = 1.0, reinforce = False):
+                                    alpha = 1.0, num_reinforced = 0):
 
-        unlabeled_loss, _, unlabeled_ps_loss = self.loss(unlabeled_images, reinforce = reinforce)
+        unlabeled_loss, _, unlabeled_ps_loss = \
+            self.loss(unlabeled_images, num_reinforced = num_reinforced)
 
         if labeled_images is not None:
             assert labels is not None
 
-            labeled_loss, computed_class_weights, _ = \
+            labeled_loss, computed_class_weights, labeled_ps_loss = \
                 self.loss(labeled_images, true_class_labels = labels)
 
             cross_entropy_term = \
@@ -293,6 +392,7 @@ class HandwritingVAE(nn.Module):
 
             num_labeled = labeled_images.size()[0]
         else:
+            labeled_ps_loss = 0.0
             labeled_loss = 0.0
             cross_entropy_term = 0.0
             num_labeled = 1.0
@@ -304,12 +404,9 @@ class HandwritingVAE(nn.Module):
                 labeled_loss * num_labeled + \
                 alpha * cross_entropy_term
 
-        if reinforce:
-            ps_loss_scaled = unlabeled_ps_loss * num_unlabeled_total + \
-                    labeled_loss * num_labeled + \
-                    alpha * cross_entropy_term
-        else:
-            ps_loss_scaled = None
+        ps_loss_scaled = unlabeled_ps_loss * num_unlabeled_total + \
+                labeled_ps_loss * num_labeled + \
+                alpha * cross_entropy_term
 
         return loss_scaled, ps_loss_scaled, \
                     unlabeled_loss, labeled_loss, \
@@ -358,83 +455,86 @@ class HandwritingVAE(nn.Module):
 
         return avg_loss
 
-    def train_module(self, train_loader, test_loader,
-                    set_true_class_label = False,
-                    outfile = './mnist_vae',
-                    n_epoch = 200, print_every = 10, save_every = 20,
-                    weight_decay = 1e-6, lr = 0.001,
-                    save_final_enc = True):
-
-        optimizer = optim.Adam(self.parameters(), lr=lr,
-                                weight_decay=weight_decay)
-
-        iter_array = []
-        train_loss_array = []
-        test_loss_array = []
-
-        train_loss = self.eval_vae(train_loader, set_true_class_label = set_true_class_label)
-        test_loss = self.eval_vae(test_loader, set_true_class_label = set_true_class_label)
-        print('  * init train recon loss: {:.10g};'.format(train_loss))
-        print('  * init test recon loss: {:.10g};'.format(test_loss))
-
-        iter_array.append(0)
-        train_loss_array.append(train_loss.detach().cpu().numpy())
-        test_loss_array.append(test_loss.detach().cpu().numpy())
-
-        for epoch in range(1, n_epoch + 1):
-            start_time = timeit.default_timer()
-
-            batch_loss = self.eval_vae(train_loader,
-                                        optimizer = optimizer,
-                                        train = True,
-                                        set_true_class_label = set_true_class_label)
-
-            elapsed = timeit.default_timer() - start_time
-            print('[{}] loss: {:.10g}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
-
-            if epoch % print_every == 0:
-                train_loss = self.eval_vae(train_loader, set_true_class_label = set_true_class_label)
-                test_loss = self.eval_vae(test_loader, set_true_class_label = set_true_class_label)
-
-                print('  * train recon loss: {:.10g};'.format(train_loss))
-                print('  * test recon loss: {:.10g};'.format(test_loss))
-
-                iter_array.append(epoch)
-                train_loss_array.append(train_loss.detach().cpu().numpy())
-                test_loss_array.append(test_loss.detach().cpu().numpy())
-
-            if epoch % save_every == 0:
-                outfile_every = outfile + '_enc_epoch' + str(epoch)
-                print("writing the encoder parameters to " + outfile_every + '\n')
-                torch.save(self.encoder.state_dict(), outfile_every)
-
-                outfile_every = outfile + '_dec_epoch' + str(epoch)
-                print("writing the decoder parameters to " + outfile_every + '\n')
-                torch.save(self.decoder.state_dict(), outfile_every)
-
-                outfile_every = outfile + '_classifier_epoch' + str(epoch)
-                print("writing the classifier parameters to " + outfile_every + '\n')
-                torch.save(vae.classifier.state_dict(), outfile_every)
-
-
-        if save_final_enc:
-            outfile_final = outfile + '_enc_final'
-            print("writing the encoder parameters to " + outfile_final + '\n')
-            torch.save(self.encoder.state_dict(), outfile_final)
-
-            outfile_final = outfile + '_dec_final'
-            print("writing the decoder parameters to " + outfile_final + '\n')
-            torch.save(self.decoder.state_dict(), outfile_final)
-
-            outfile_final = outfile + '_classifier_final'
-            print("writing the classifier parameters to " + outfile_final + '\n')
-            torch.save(self.classifier.state_dict(), outfile_final)
-
-            loss_array = np.zeros((3, len(iter_array)))
-            loss_array[0, :] = iter_array
-            loss_array[1, :] = train_loss_array
-            loss_array[2, :] = test_loss_array
-            np.savetxt(outfile + 'loss_array.txt', loss_array)
+    # def train_module(self, train_loader, test_loader,
+    #                 set_true_class_label = False,
+    #                 outfile = './mnist_vae',
+    #                 n_epoch = 200, print_every = 10, save_every = 20,
+    #                 weight_decay = 1e-6, lr = 0.001,
+    #                 save_final_enc = True):
+    #
+    #     optimizer = optim.Adam([
+    #             {'params': model.classifier.parameters(), 'lr': lr},
+    #             {'params': model.encoder.parameters(), 'lr': lr * 1e-2},
+    #             {'params': model.decoder.parameters(), 'lr': lr * 1e-2}],
+    #             weight_decay=weight_decay)
+    #
+    #     iter_array = []
+    #     train_loss_array = []
+    #     test_loss_array = []
+    #
+    #     train_loss = self.eval_vae(train_loader, set_true_class_label = set_true_class_label)
+    #     test_loss = self.eval_vae(test_loader, set_true_class_label = set_true_class_label)
+    #     print('  * init train recon loss: {:.10g};'.format(train_loss))
+    #     print('  * init test recon loss: {:.10g};'.format(test_loss))
+    #
+    #     iter_array.append(0)
+    #     train_loss_array.append(train_loss.detach().cpu().numpy())
+    #     test_loss_array.append(test_loss.detach().cpu().numpy())
+    #
+    #     for epoch in range(1, n_epoch + 1):
+    #         start_time = timeit.default_timer()
+    #
+    #         batch_loss = self.eval_vae(train_loader,
+    #                                     optimizer = optimizer,
+    #                                     train = True,
+    #                                     set_true_class_label = set_true_class_label)
+    #
+    #         elapsed = timeit.default_timer() - start_time
+    #         print('[{}] loss: {:.10g}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
+    #
+    #         if epoch % print_every == 0:
+    #             train_loss = self.eval_vae(train_loader, set_true_class_label = set_true_class_label)
+    #             test_loss = self.eval_vae(test_loader, set_true_class_label = set_true_class_label)
+    #
+    #             print('  * train recon loss: {:.10g};'.format(train_loss))
+    #             print('  * test recon loss: {:.10g};'.format(test_loss))
+    #
+    #             iter_array.append(epoch)
+    #             train_loss_array.append(train_loss.detach().cpu().numpy())
+    #             test_loss_array.append(test_loss.detach().cpu().numpy())
+    #
+    #         if epoch % save_every == 0:
+    #             outfile_every = outfile + '_enc_epoch' + str(epoch)
+    #             print("writing the encoder parameters to " + outfile_every + '\n')
+    #             torch.save(self.encoder.state_dict(), outfile_every)
+    #
+    #             outfile_every = outfile + '_dec_epoch' + str(epoch)
+    #             print("writing the decoder parameters to " + outfile_every + '\n')
+    #             torch.save(self.decoder.state_dict(), outfile_every)
+    #
+    #             outfile_every = outfile + '_classifier_epoch' + str(epoch)
+    #             print("writing the classifier parameters to " + outfile_every + '\n')
+    #             torch.save(vae.classifier.state_dict(), outfile_every)
+    #
+    #
+    #     if save_final_enc:
+    #         outfile_final = outfile + '_enc_final'
+    #         print("writing the encoder parameters to " + outfile_final + '\n')
+    #         torch.save(self.encoder.state_dict(), outfile_final)
+    #
+    #         outfile_final = outfile + '_dec_final'
+    #         print("writing the decoder parameters to " + outfile_final + '\n')
+    #         torch.save(self.decoder.state_dict(), outfile_final)
+    #
+    #         outfile_final = outfile + '_classifier_final'
+    #         print("writing the classifier parameters to " + outfile_final + '\n')
+    #         torch.save(vae.classifier.state_dict(), outfile_final)
+    #
+    #         loss_array = np.zeros((3, len(iter_array)))
+    #         loss_array[0, :] = iter_array
+    #         loss_array[1, :] = train_loss_array
+    #         loss_array[2, :] = test_loss_array
+    #         np.savetxt(outfile + 'loss_array.txt', loss_array)
 
 
 ######################################
@@ -467,7 +567,7 @@ def eval_classification_accuracy(classifier, loader):
 def eval_semi_supervised_loss(vae, loader_unlabeled,
                         labeled_images = None, labels = None,
                         optimizer = None, train = False,
-                        alpha = 1.0, reinforce = False):
+                        alpha = 1.0, num_reinforced = 0):
     if train:
         vae.train()
         assert optimizer is not None
@@ -503,14 +603,10 @@ def eval_semi_supervised_loss(vae, loader_unlabeled,
                                             labeled_images = labeled_images,
                                             labels = labels,
                                             alpha = alpha,
-                                            reinforce = reinforce)
+                                            num_reinforced = num_reinforced)
 
         if train:
-            if reinforce:
-                (semi_super_ps_loss).backward()
-            else:
-                (semi_super_loss).backward()
-        if train:
+            (semi_super_ps_loss).backward()
             optimizer.step()
 
         avg_semisuper_loss += semi_super_loss.data / num_unlabeled_total
@@ -520,7 +616,7 @@ def eval_semi_supervised_loss(vae, loader_unlabeled,
     return avg_semisuper_loss, avg_unlabeled_loss
 
 def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labels,
-                    test_loader, alpha = 0.01, reinforce = False,
+                    test_loader, alpha = 0.01, num_reinforced = 0,
                     outfile = './mnist_vae_semisupervised',
                     n_epoch = 200, print_every = 10, save_every = 20,
                     weight_decay = 1e-6, lr = 0.001,
@@ -530,11 +626,31 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     # define optimizer
     if train_classifier_only:
         # for debugging only
-        optimizer = optim.Adam(vae.classifier.parameters(), lr=lr,
-                                weight_decay=weight_decay)
+        optimizer = optim.Adam([
+                {'params': vae.classifier.parameters(), 'lr': lr}],
+                weight_decay=weight_decay)
+
+        if vae.use_baseline:
+            optimizer = optim.Adam([
+                    {'params': vae.classifier.parameters(), 'lr': lr},
+                    {'params': vae.baseline_learner.parameters(), 'lr': lr}],
+                    weight_decay=weight_decay)
+
     else:
-        optimizer = optim.Adam(vae.parameters(), lr=lr,
-                                weight_decay=weight_decay)
+        optimizer = optim.Adam([
+                {'params': vae.classifier.parameters(), 'lr': lr},
+                {'params': vae.encoder.parameters(), 'lr': lr * 1e-3},
+                {'params': vae.decoder.parameters(), 'lr': lr * 1e-3}],
+                weight_decay=weight_decay)
+
+        if vae.use_baseline:
+            optimizer = optim.Adam([
+                    {'params': vae.classifier.parameters(), 'lr': lr},
+                    {'params': vae.encoder.parameters(), 'lr': lr * 1e-3},
+                    {'params': vae.decoder.parameters(), 'lr': lr * 1e-3},
+                    {'params': vae.baseline_learner.parameters(), 'lr': lr}],
+                    weight_decay=weight_decay)
+
 
     iter_array = []
     train_loss_array = []
@@ -569,7 +685,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                                 optimizer = optimizer,
                                 train = True,
                                 alpha = alpha,
-                                reinforce = reinforce)
+                                num_reinforced = num_reinforced)
 
         elapsed = timeit.default_timer() - start_time
         print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
