@@ -9,7 +9,7 @@ python ../libraries/run_mnist_semisupervised_training.py \
 			--outfilename '../mnist_vae_results_aws/experimenting_mix_classic_reinforce/foo' \
 			--alpha 0.0 \
 			--propn_labeled 0.1 \
-			--num_reinforced 9 \
+			--num_reinforced 10 \
 			--use_baseline True \
 			--latent_dim 32 \
 			--load_enc True \
