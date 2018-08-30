@@ -639,15 +639,15 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     else:
         optimizer = optim.Adam([
                 {'params': vae.classifier.parameters(), 'lr': lr},
-                {'params': vae.encoder.parameters(), 'lr': lr * 1e-3},
-                {'params': vae.decoder.parameters(), 'lr': lr * 1e-3}],
+                {'params': vae.encoder.parameters(), 'lr': lr},
+                {'params': vae.decoder.parameters(), 'lr': lr}],
                 weight_decay=weight_decay)
 
         if vae.use_baseline:
             optimizer = optim.Adam([
                     {'params': vae.classifier.parameters(), 'lr': lr},
-                    {'params': vae.encoder.parameters(), 'lr': lr * 1e-3},
-                    {'params': vae.decoder.parameters(), 'lr': lr * 1e-3},
+                    {'params': vae.encoder.parameters(), 'lr': lr},
+                    {'params': vae.decoder.parameters(), 'lr': lr},
                     {'params': vae.baseline_learner.parameters(), 'lr': lr}],
                     weight_decay=weight_decay)
 
