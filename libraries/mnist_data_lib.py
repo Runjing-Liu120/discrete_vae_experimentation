@@ -17,8 +17,11 @@ def load_mnist_data(data_dir = '../mnist_data/', train = True):
 
     # trans = transforms.Compose([transforms.ToTensor(),
     #                             transforms.Normalize((0.5,), (1.0,))])
-    
+
     trans = lambda x: transforms.ToTensor()(x).bernoulli()
+
+    # sigmoid = torch.nn.Sigmoid()
+    # trans = lambda x: sigmoid(transforms.ToTensor()(x))
 
     data = dset.MNIST(root=data_dir, train=train,
                             transform=trans, download=True)
