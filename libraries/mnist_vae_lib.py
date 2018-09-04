@@ -33,8 +33,9 @@ class MLPEncoder(nn.Module):
 
         # define the linear layers
         self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 256) # 128 hidden nodes; two more layers
-        self.fc2 = nn.Linear(256, 128)
-        self.fc3 = nn.Linear(128, latent_dim * 2)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 128)
+        self.fc4 = nn.Linear(128, latent_dim * 2)
 
     def forward(self, image, z):
 
@@ -44,7 +45,8 @@ class MLPEncoder(nn.Module):
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
-        h = self.fc3(h)
+        h = F.relu(self.fc3(h))
+        h = self.fc4(h)
         # h = self.fc4(h)
         # h = self.fc5(h)
 
@@ -74,19 +76,19 @@ class Classifier(nn.Module):
         self.n_classes = n_classes
 
         self.fc1 = nn.Linear(self.n_pixels, 256)
-        # self.fc2 = nn.Linear(256, 256)
-        # self.fc3 = nn.Linear(256, 256)
-        self.fc2 = nn.Linear(256, n_classes - 1)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 256)
+        self.fc4 = nn.Linear(256, n_classes)
 
     def forward(self, image):
         h = image.view(-1, self.n_pixels)
 
         h = F.relu(self.fc1(h))
-        # h = F.relu(self.fc2(h))
-        # h = F.relu(self.fc3(h))
-        h = self.fc2(h)
+        h = F.relu(self.fc2(h))
+        h = F.relu(self.fc3(h))
+        h = self.fc4(h)
 
-        return common_utils.get_symplex_from_reals(h)
+        return F.softmax(h, dim = 1)
 
 class BaselineLearner(nn.Module):
     def __init__(self, slen = 28):
@@ -128,7 +130,8 @@ class MLPConditionalDecoder(nn.Module):
 
         self.fc1 = nn.Linear(latent_dim + n_classes, 128)
         self.fc2 = nn.Linear(128, 256)
-        self.fc3 = nn.Linear(256, self.n_pixels)
+        self.fc3 = nn.Linear(256, 256)
+        self.fc4 = nn.Linear(256, self.n_pixels)
 
         self.sigmoid = nn.Sigmoid()
 
@@ -141,7 +144,8 @@ class MLPConditionalDecoder(nn.Module):
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
-        h = self.fc3(h)
+        h = F.relu(self.fc3(h))
+        h = self.fc4(h)
 
         h = h.view(-1, self.slen, self.slen)
 
@@ -639,15 +643,15 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     else:
         optimizer = optim.Adam([
                 {'params': vae.classifier.parameters(), 'lr': lr},
-                {'params': vae.encoder.parameters(), 'lr': lr * 1e-3},
-                {'params': vae.decoder.parameters(), 'lr': lr * 1e-3}],
+                {'params': vae.encoder.parameters(), 'lr': lr},
+                {'params': vae.decoder.parameters(), 'lr': lr}],
                 weight_decay=weight_decay)
 
         if vae.use_baseline:
             optimizer = optim.Adam([
                     {'params': vae.classifier.parameters(), 'lr': lr},
-                    {'params': vae.encoder.parameters(), 'lr': lr * 1e-3},
-                    {'params': vae.decoder.parameters(), 'lr': lr * 1e-3},
+                    {'params': vae.encoder.parameters(), 'lr': lr},
+                    {'params': vae.decoder.parameters(), 'lr': lr},
                     {'params': vae.baseline_learner.parameters(), 'lr': lr}],
                     weight_decay=weight_decay)
 
@@ -746,3 +750,56 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         loss_array[4, :] = test_class_accuracy_array
 
         np.savetxt(outfile + 'loss_array.txt', loss_array)
+
+
+#####################
+# Some functions to examine VAE results
+def get_classification_accuracy(loader, classifier,
+                                    return_wrong_images = False,
+                                    max_images = 1000):
+
+    n_images = 0.0
+    accuracy = 0.0
+
+    wrong_images = torch.zeros((0, classifier.slen, classifier.slen))
+    wrong_labels = torch.LongTensor(0)
+
+    for batch_idx, data in enumerate(loader):
+        class_weights = classifier(data['image'])
+
+        z_ind = torch.argmax(class_weights, dim = 1)
+
+        accuracy += torch.sum(z_ind == data['label']).float()
+        # print(accuracy)
+
+        if return_wrong_images:
+            wrong_indx = 1 - (z_ind == data['label'])
+            wrong_images = torch.cat((wrong_images,
+                                    data['image'][wrong_indx, :, :]),
+                                    dim = 0)
+            wrong_labels = torch.cat((wrong_labels,
+                                data['label'][wrong_indx]))
+        else:
+            wrong_images = None
+            wrong_labels = None
+
+        n_images += len(z_ind)
+        if n_images > 1000:
+            break
+
+    return accuracy / n_images, wrong_images, wrong_labels
+
+def get_reconstructions(vae, image):
+    class_weights = vae.classifier(image)
+
+    z_ind = torch.argmax(class_weights, dim = 1)
+    z_ind_one_hot = \
+        common_utils.get_one_hot_encoding_from_int(z_ind, vae.n_classes)
+
+    latent_means, latent_std, latent_samples = \
+        vae.encoder_forward(image, z_ind_one_hot)
+
+
+    image_mu = vae.decoder_forward(latent_means, z_ind_one_hot)
+
+    return image_mu, z_ind
