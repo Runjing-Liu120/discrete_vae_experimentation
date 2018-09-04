@@ -41,7 +41,9 @@ class MLPEncoder(nn.Module):
 
         # feed through neural network
         h = image.view(-1, self.n_pixels)
-        h = torch.cat((h, z), dim = 1)
+
+        if z is not None:
+            h = torch.cat((h, z), dim = 1)
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
@@ -137,10 +139,14 @@ class MLPConditionalDecoder(nn.Module):
 
     def forward(self, latent_params, z):
         assert latent_params.shape[1] == self.latent_dim
-        assert z.shape[1] == self.n_classes # z should be one hot encoded
-        assert latent_params.shape[0] == z.shape[0]
 
-        h = torch.cat((latent_params, z), dim = 1)
+        if z is not None:
+            assert z.shape[1] == self.n_classes # z should be one hot encoded
+            assert latent_params.shape[0] == z.shape[0]
+
+            h = torch.cat((latent_params, z), dim = 1)
+        else:
+            h = latent_params
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
@@ -416,48 +422,48 @@ class HandwritingVAE(nn.Module):
                     unlabeled_loss, labeled_loss, \
                     cross_entropy_term / num_labeled
 
-    def eval_vae(self, train_loader, optimizer = None, train = False,
-                    set_true_class_label = False):
-        if train:
-            self.train()
-            assert optimizer is not None
-        else:
-            self.eval()
-
-        avg_loss = 0.0
-
-        num_images = train_loader.dataset.__len__()
-        i = 0
-
-        for batch_idx, data in enumerate(train_loader):
-            # first entry of data is the actual image
-            # the second entry is the true class label
-            # if torch.cuda.is_available():
-            image = data['image'].to(device)
-            # else:
-            #     image = data['image']
-
-            # i+=1; print('batch {}'.format(i))
-
-            if optimizer is not None:
-                optimizer.zero_grad()
-
-            batch_size = image.size()[0]
-
-            if set_true_class_label:
-                true_class_labels = data['label'].numpy()
-            else:
-                true_class_labels = None
-
-            loss = self.loss(image, true_class_labels)[0]
-
-            if train:
-                (loss * num_images).backward()
-                optimizer.step()
-
-            avg_loss += loss.data  * (batch_size / num_images)
-
-        return avg_loss
+    # def eval_vae(self, train_loader, optimizer = None, train = False,
+    #                 set_true_class_label = False):
+    #     if train:
+    #         self.train()
+    #         assert optimizer is not None
+    #     else:
+    #         self.eval()
+    #
+    #     avg_loss = 0.0
+    #
+    #     num_images = train_loader.dataset.__len__()
+    #     i = 0
+    #
+    #     for batch_idx, data in enumerate(train_loader):
+    #         # first entry of data is the actual image
+    #         # the second entry is the true class label
+    #         # if torch.cuda.is_available():
+    #         image = data['image'].to(device)
+    #         # else:
+    #         #     image = data['image']
+    #
+    #         # i+=1; print('batch {}'.format(i))
+    #
+    #         if optimizer is not None:
+    #             optimizer.zero_grad()
+    #
+    #         batch_size = image.size()[0]
+    #
+    #         if set_true_class_label:
+    #             true_class_labels = data['label'].numpy()
+    #         else:
+    #             true_class_labels = None
+    #
+    #         loss = self.loss(image, true_class_labels)[0]
+    #
+    #         if train:
+    #             (loss * num_images).backward()
+    #             optimizer.step()
+    #
+    #         avg_loss += loss.data  * (batch_size / num_images)
+    #
+    #     return avg_loss
 
     # def train_module(self, train_loader, test_loader,
     #                 set_true_class_label = False,
@@ -545,28 +551,6 @@ class HandwritingVAE(nn.Module):
 # FUNCTIONS TO TRAIN SEMI-SUPERVISED MODEL
 ######################################
 # TODO: integrate this into the class ...
-def eval_classification_accuracy(classifier, loader):
-    accuracy = 0.0
-    n_images = 0.0
-
-    for batch_idx, data in enumerate(loader):
-
-        # if torch.cuda.is_available():
-        image = data['image'].to(device)
-        label = data['label'].to(device)
-        # else:
-        #     image = data['image']
-        #     label = data['label']
-
-        class_weights = classifier(image)
-
-        z_ind = torch.argmax(class_weights, dim = 1)
-
-        accuracy += torch.sum(z_ind == label).float()
-
-        n_images += len(z_ind)
-
-    return accuracy / n_images
 
 def eval_semi_supervised_loss(vae, loader_unlabeled,
                         labeled_images = None, labels = None,
@@ -750,56 +734,3 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         loss_array[4, :] = test_class_accuracy_array
 
         np.savetxt(outfile + 'loss_array.txt', loss_array)
-
-
-#####################
-# Some functions to examine VAE results
-def get_classification_accuracy(loader, classifier,
-                                    return_wrong_images = False,
-                                    max_images = 1000):
-
-    n_images = 0.0
-    accuracy = 0.0
-
-    wrong_images = torch.zeros((0, classifier.slen, classifier.slen))
-    wrong_labels = torch.LongTensor(0)
-
-    for batch_idx, data in enumerate(loader):
-        class_weights = classifier(data['image'])
-
-        z_ind = torch.argmax(class_weights, dim = 1)
-
-        accuracy += torch.sum(z_ind == data['label']).float()
-        # print(accuracy)
-
-        if return_wrong_images:
-            wrong_indx = 1 - (z_ind == data['label'])
-            wrong_images = torch.cat((wrong_images,
-                                    data['image'][wrong_indx, :, :]),
-                                    dim = 0)
-            wrong_labels = torch.cat((wrong_labels,
-                                data['label'][wrong_indx]))
-        else:
-            wrong_images = None
-            wrong_labels = None
-
-        n_images += len(z_ind)
-        if n_images > 1000:
-            break
-
-    return accuracy / n_images, wrong_images, wrong_labels
-
-def get_reconstructions(vae, image):
-    class_weights = vae.classifier(image)
-
-    z_ind = torch.argmax(class_weights, dim = 1)
-    z_ind_one_hot = \
-        common_utils.get_one_hot_encoding_from_int(z_ind, vae.n_classes)
-
-    latent_means, latent_std, latent_samples = \
-        vae.encoder_forward(image, z_ind_one_hot)
-
-
-    image_mu = vae.decoder_forward(latent_means, z_ind_one_hot)
-
-    return image_mu, z_ind
