@@ -23,9 +23,14 @@ parser = argparse.ArgumentParser(description='FullVAE')
 
 parser.add_argument('--mnist_data_dir', type = str,
                     default='../mnist_data/')
-parser.add_argument('--latent_dim', type=int, default=5, metavar='N',
+parser.add_argument('--args.sqrt_latent_dim1', type=int, default=5, metavar='N',
                     help='latent dimension (default = 5)')
-parser.add_argument('--model1_init', type=str,
+parser.add_argument('--args.latent_dim2', type=int, default=5, metavar='N',
+                    help='latent dimension (default = 5)')
+
+parser.add_argument('--model1_enc_init', type=str,
+                    help='where to load the model 1 vae')
+parser.add_argument('--model1_dec_init', type=str,
                     help='where to load the model 1 vae')
 
 # Training parameters
@@ -89,7 +94,8 @@ args = parser.parse_args()
 def validate_args():
     assert os.path.exists(args.outdir)
 
-    assert os.path.isfile(args.model1_init)
+    assert os.path.isfile(args.model1_enc_init)
+    assert os.path.isfile(args.model1_dec_init)
 
     if args.load_enc:
         assert os.path.isfile(args.enc_init)
@@ -136,12 +142,12 @@ print('num_train_unlabeled: \n', train_set_unlabeled.num_images)
 print('num_test: ', test_set.num_images)
 
 # SET UP VAE
-model1_vae = stacked_vae_lib.Model1VAE(latent_dim = args.latent_dim1)
+model1_vae = stacked_vae_lib.Model1VAE(sqrt_latent_dim = args.sqrt_latent_dim1)
 print('initializing model1 enc from ', args.model1_enc_init)
 print('initializing model2 dec from ', args.model1_dec_init )
 
 enc_file = args.model1_enc_init
-dec_file = args.model1_dec_init'
+dec_file = args.model1_dec_init
 
 model1_vae.encoder.load_state_dict(torch.load(enc_file,
                                map_location=lambda storage, loc: storage))

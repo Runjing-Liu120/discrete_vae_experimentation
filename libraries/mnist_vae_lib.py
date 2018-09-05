@@ -397,6 +397,19 @@ class HandwritingVAE(nn.Module):
         return loss_scaled, ps_loss_scaled, \
                     unlabeled_loss, labeled_loss, \
                     cross_entropy_term / num_labeled
+    def save_vae(outfile):
+        outfile_every = outfile + '_enc_epoch' + str(epoch)
+        print("writing the encoder parameters to " + outfile_every + '\n')
+        torch.save(self.encoder.state_dict(), outfile_every)
+
+        outfile_every = outfile + '_dec_epoch' + str(epoch)
+        print("writing the decoder parameters to " + outfile_every + '\n')
+        torch.save(self.decoder.state_dict(), outfile_every)
+
+        outfile_every = outfile + '_classifier_epoch' + str(epoch)
+        print("writing the classifier parameters to " + outfile_every + '\n')
+        torch.save(self.classifier.state_dict(), outfile_every)
+
 
     # def eval_vae(self, train_loader, optimizer = None, train = False,
     #                 set_true_class_label = False):
@@ -568,9 +581,9 @@ def sample_class_weights(class_weights, num_reinforced):
 def compute_loss_from_conditional_loss(image, class_weights,
                                     n_classes,
                                     get_conditional_loss,
-                                    num_reinforced,
-                                    use_baseline,
-                                    baseline):
+                                    num_reinforced = 0,
+                                    use_baseline = False,
+                                    baseline = 0.0):
 
     # compute full loss, given a function to compute conditional loss
 
@@ -740,31 +753,33 @@ def train_semisupervised_model(vae, optimizer,
             test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
 
         if epoch % save_every == 0:
-            outfile_every = outfile + '_enc_epoch' + str(epoch)
-            print("writing the encoder parameters to " + outfile_every + '\n')
-            torch.save(vae.encoder.state_dict(), outfile_every)
-
-            outfile_every = outfile + '_dec_epoch' + str(epoch)
-            print("writing the decoder parameters to " + outfile_every + '\n')
-            torch.save(vae.decoder.state_dict(), outfile_every)
-
-            outfile_every = outfile + '_classifier_epoch' + str(epoch)
-            print("writing the classifier parameters to " + outfile_every + '\n')
-            torch.save(vae.classifier.state_dict(), outfile_every)
+            vae.save_vae(outfile, '_epoch' + string(epoch))
+            # outfile_every = outfile + '_enc_epoch' + str(epoch)
+            # print("writing the encoder parameters to " + outfile_every + '\n')
+            # torch.save(vae.encoder.state_dict(), outfile_every)
+            #
+            # outfile_every = outfile + '_dec_epoch' + str(epoch)
+            # print("writing the decoder parameters to " + outfile_every + '\n')
+            # torch.save(vae.decoder.state_dict(), outfile_every)
+            #
+            # outfile_every = outfile + '_classifier_epoch' + str(epoch)
+            # print("writing the classifier parameters to " + outfile_every + '\n')
+            # torch.save(vae.classifier.state_dict(), outfile_every)
 
 
     if save_final_enc:
-        outfile_final = outfile + '_enc_final'
-        print("writing the encoder parameters to " + outfile_final + '\n')
-        torch.save(vae.encoder.state_dict(), outfile_final)
-
-        outfile_final = outfile + '_dec_final'
-        print("writing the decoder parameters to " + outfile_final + '\n')
-        torch.save(vae.decoder.state_dict(), outfile_final)
-
-        outfile_final = outfile + '_classifier_final'
-        print("writing the classifier parameters to " + outfile_final + '\n')
-        torch.save(vae.classifier.state_dict(), outfile_final)
+        vae.save_vae(outfile, '_final')
+        # outfile_final = outfile + '_enc_final'
+        # print("writing the encoder parameters to " + outfile_final + '\n')
+        # torch.save(vae.encoder.state_dict(), outfile_final)
+        #
+        # outfile_final = outfile + '_dec_final'
+        # print("writing the decoder parameters to " + outfile_final + '\n')
+        # torch.save(vae.decoder.state_dict(), outfile_final)
+        #
+        # outfile_final = outfile + '_classifier_final'
+        # print("writing the classifier parameters to " + outfile_final + '\n')
+        # torch.save(vae.classifier.state_dict(), outfile_final)
 
 
         loss_array = np.zeros((5, len(iter_array)))

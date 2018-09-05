@@ -171,6 +171,7 @@ class StackedModelVAE(nn.Module):
         super(StackedModelVAE, self).__init__()
 
         self.model1_vae = model1_vae
+        self.model1_sqrt_latent_dim = model1_vae.sqrt_latent_dim
         self.model1_latent_dim = model1_vae.latent_dim
         self.slen = model1_vae.slen
 
@@ -182,18 +183,31 @@ class StackedModelVAE(nn.Module):
                         n_classes = n_classes,
                         slen = self.model1_vae.sqrt_latent_dim,
                         use_baseline = False,
-                        normal_likelihood = False)
+                        normal_likelihood = use_baseline)
+
+
+    def classifier(self, image):
+        latent1_mean, latent1_std, latent1_samples = \
+                self.model1_encoder_forward(image)
+
+        latent1_mean = latent1_mean.view(-1, self.model1_sqrt_latent_dim,\
+                                                self.model1_sqrt_latent_dim)
+
+        class_weights = self.model2_vae.classifier(latent1_mean)
+
+        return class_weights
 
     def model1_encoder_forward(self, image):
         # pass through model 1 encoder
-        latent1_mean, latent1_std = self.model1_vae.encoder(image)
+        latent1_mean, latent1_std = self.model1_vae.encoder(image, z = None)
 
         # sample
         latent1_samples = \
             torch.randn(latent1_mean.shape).to(device) * latent1_std + \
                                                             latent1_mean
 
-        return latent1_mean, latent1_std, latent1_samples
+        return latent1_mean, latent1_std, \
+                    latent1_samples
 
 
     def loss(self, image, true_class_labels = None,
@@ -202,7 +216,12 @@ class StackedModelVAE(nn.Module):
         latent1_mean, latent1_std, latent1_samples = \
             self.model1_encoder_forward(image)
 
-        loss, computed_class_weights, ps_loss = self.model2_vae.loss(image,
+        latent1_samples = \
+                latent1_samples.view(-1, self.model1_sqrt_latent_dim,\
+                                            self.model1_sqrt_latent_dim)
+
+
+        loss, computed_class_weights, ps_loss = self.model2_vae.loss(latent1_samples,
                         true_class_labels = true_class_labels,
                         num_reinforced = num_reinforced)
 
@@ -214,18 +233,37 @@ class StackedModelVAE(nn.Module):
 
         latent1_mean_unlab, latent1_std_unlab, latent1_samples_unlab = \
             self.model1_encoder_forward(unlabeled_images)
+        latent1_samples_unlab = \
+            latent1_samples_unlab.view(-1, self.model1_sqrt_latent_dim,\
+                                            self.model1_sqrt_latent_dim)
 
         if labeled_images is not None:
             latent1_mean_lab, latent1_std_lab, latent1_samples_lab = \
                 self.model1_encoder_forward(labeled_images)
+            latent1_samples_lab = \
+                latent1_samples_lab.view(-1, self.model1_sqrt_latent_dim,\
+                                                self.model1_sqrt_latent_dim)
         else:
             latent1_mean_lab = None
             latent1_std_lab = None
             latent1_samples_lab = None
 
-        return self.model2_vae.get_semisupervised_loss(latent1_mean_unlab,
+        return self.model2_vae.get_semisupervised_loss(latent1_samples_unlab,
                                         num_unlabeled_total,
                                         labeled_images = latent1_samples_lab,
                                         labels = labels,
                                         alpha = alpha,
                                         num_reinforced = num_reinforced)
+
+    def save_vae(self, outfile, tag):
+        outfile_every = outfile + '_enc' + tag
+        print("writing the encoder parameters to " + outfile_every + '\n')
+        torch.save(self.model2_vae.encoder.state_dict(), outfile_every)
+
+        outfile_every = outfile + '_dec' + tag
+        print("writing the decoder parameters to " + outfile_every + '\n')
+        torch.save(self.model2_vae.decoder.state_dict(), outfile_every)
+
+        outfile_every = outfile + '_classifier' + tag
+        print("writing the classifier parameters to " + outfile_every + '\n')
+        torch.save(self.model2_vae.classifier.state_dict(), outfile_every)

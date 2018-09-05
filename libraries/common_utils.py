@@ -74,7 +74,8 @@ def get_classification_accuracy(loader, classifier,
     n_images = 0.0
     accuracy = 0.0
 
-    wrong_images = torch.zeros((0, classifier.slen, classifier.slen))
+    slen = loader.sampler.data_source[0]['image'].shape[0]
+    wrong_images = torch.zeros((0, slen, slen))
     wrong_labels = torch.LongTensor(0)
 
     for batch_idx, data in enumerate(loader):
