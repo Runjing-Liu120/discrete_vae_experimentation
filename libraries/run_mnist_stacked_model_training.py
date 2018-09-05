@@ -25,6 +25,8 @@ parser.add_argument('--mnist_data_dir', type = str,
                     default='../mnist_data/')
 parser.add_argument('--latent_dim', type=int, default=5, metavar='N',
                     help='latent dimension (default = 5)')
+parser.add_argument('--model1_init', type=str,
+                    help='where to load the model 1 vae')
 
 # Training parameters
 parser.add_argument('--epochs', type=int, default=1000,
@@ -87,6 +89,8 @@ args = parser.parse_args()
 def validate_args():
     assert os.path.exists(args.outdir)
 
+    assert os.path.isfile(args.model1_init)
+
     if args.load_enc:
         assert os.path.isfile(args.enc_init)
 
@@ -127,35 +131,34 @@ for batch_idx, d in enumerate(train_loader_labeled):
     break
 
 print('num_train_labeled: ', train_set_labeled.num_images)
-print('check: \n', data_labeled['image'].shape[0])
-
 print('num_train_unlabeled: \n', train_set_unlabeled.num_images)
 
 print('num_test: ', test_set.num_images)
 
 # SET UP VAE
+model1_vae = stacked_vae_lib.Model1VAE(latent_dim = args.latent_dim1)
+print('initializing model1 enc from ', args.model1_enc_init)
+print('initializing model2 dec from ', args.model1_dec_init )
+
+enc_file = args.model1_enc_init
+dec_file = args.model1_dec_init'
+
+model1_vae.encoder.load_state_dict(torch.load(enc_file,
+                               map_location=lambda storage, loc: storage))
+
+model1_vae.decoder.load_state_dict(torch.load(dec_file,
+                               map_location=lambda storage, loc: storage))
+
+
 slen = train_set_unlabeled[0]['image'].shape[0]
-latent_dim = args.latent_dim
+latent_dim2 = args.latent_dim2
 n_classes = 10
-vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
-                            n_classes = n_classes,
-                            slen = slen, use_baseline = args.use_baseline)
+vae = stacked_vae_lib.StackedModelVAE(model1_vae,
+                m2_latent_dim = latent_dim2,
+                n_classes = n_classes,
+                use_baseline = args.use_baseline)
+
 vae.to(device)
-if args.load_enc:
-    print('initializing encoder from ', args.enc_init)
-
-    vae.encoder.load_state_dict(torch.load(args.enc_init,
-                                    map_location=lambda storage, loc: storage))
-if args.load_dec:
-    print('initializing decoder from ', args.dec_init)
-
-    vae.decoder.load_state_dict(torch.load(args.dec_init,
-                                    map_location=lambda storage, loc: storage))
-if args.load_classifier:
-    print('initializing classifier from ', args.classifier_init)
-
-    vae.classifier.load_state_dict(torch.load(args.classifier_init,
-                                    map_location=lambda storage, loc: storage))
 
 # Set up optimizer
 if args.train_classifier_only:

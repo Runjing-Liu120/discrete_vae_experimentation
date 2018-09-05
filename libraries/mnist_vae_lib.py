@@ -117,7 +117,8 @@ class BaselineLearner(nn.Module):
 class MLPConditionalDecoder(nn.Module):
     def __init__(self, latent_dim = 5,
                         n_classes = 10,
-                        slen = 28):
+                        slen = 28,
+                        normal_likelihood = False):
 
         # This takes the latent parameters and returns the
         # mean and variance for the image reconstruction
@@ -130,10 +131,21 @@ class MLPConditionalDecoder(nn.Module):
         self.n_classes = n_classes
         self.slen = slen
 
+        # boolean flag: whether or not the generative model is a
+        # normal or bernoulli
+        self.normal_likelihood = normal_likelihood
+
         self.fc1 = nn.Linear(latent_dim + n_classes, 128)
         self.fc2 = nn.Linear(128, 256)
+
         self.fc3 = nn.Linear(256, 256)
-        self.fc4 = nn.Linear(256, self.n_pixels)
+
+        print(self.n_pixels)
+
+        if self.normal_likelihood:
+            self.fc4 = nn.Linear(256, 2 * self.n_pixels)
+        else:
+            self.fc4 = nn.Linear(256, self.n_pixels)
 
         self.sigmoid = nn.Sigmoid()
 
@@ -153,26 +165,31 @@ class MLPConditionalDecoder(nn.Module):
         h = F.relu(self.fc3(h))
         h = self.fc4(h)
 
-        h = h.view(-1, self.slen, self.slen)
+        if self.normal_likelihood:
+            h = h.view(-1, 2, self.slen, self.slen)
+            image_mean = h[:, 0, :, :]
+            image_std = torch.exp(h[:, 1, :, :])
+        else:
+            h = h.view(-1, self.slen, self.slen)
+            image_mean = self.sigmoid(h)
+            image_std = None
 
-        # image_mean = h[:, 0, :, :]
-        # image_std = torch.exp(h[:, 1, :, :])
-        image_mean = self.sigmoid(h)
-
-        return image_mean # , image_std
+        return image_mean, image_std
 
 class HandwritingVAE(nn.Module):
 
     def __init__(self, latent_dim = 5,
                     n_classes = 10,
                     slen = 28,
-                    use_baseline = False):
+                    use_baseline = False,
+                    normal_likelihood = False):
 
         super(HandwritingVAE, self).__init__()
 
         self.latent_dim = latent_dim
         self.n_classes = n_classes
         self.slen = slen
+        self.normal_likelihood = normal_likelihood
 
         self.encoder = MLPEncoder(latent_dim = latent_dim,
                                     slen = slen)
@@ -181,7 +198,8 @@ class HandwritingVAE(nn.Module):
 
         self.decoder = MLPConditionalDecoder(latent_dim = latent_dim,
                                                 n_classes = n_classes,
-                                                slen = slen)
+                                                slen = slen,
+                                    normal_likelihood = self.normal_likelihood)
 
         self.use_baseline = use_baseline
         if self.use_baseline:
@@ -201,9 +219,9 @@ class HandwritingVAE(nn.Module):
         assert one_hot_z.shape[0] == latent_samples.shape[0]
         assert one_hot_z.shape[1] == self.n_classes
 
-        image_mean = self.decoder(latent_samples, one_hot_z)
+        image_mean, image_std = self.decoder(latent_samples, one_hot_z)
 
-        return image_mean # , image_std
+        return image_mean, image_std
 
     def forward_conditional(self, image, z):
         # z are class labels
@@ -217,9 +235,9 @@ class HandwritingVAE(nn.Module):
             self.encoder_forward(image, one_hot_z)
 
         # pass through decoder
-        image_mu = self.decoder_forward(latent_samples, one_hot_z)
+        image_mu, image_std = self.decoder_forward(latent_samples, one_hot_z)
 
-        return image_mu, latent_means, latent_std, latent_samples
+        return image_mu, image_std, latent_means, latent_std, latent_samples
 
     def get_conditional_loss(self, image, z):
         # Returns the expectation of the objective conditional
@@ -227,14 +245,15 @@ class HandwritingVAE(nn.Module):
 
         batch_z = torch.ones(image.shape[0]).to(device) * z
 
-        image_mu, latent_means, latent_std, latent_samples = \
+        image_mu, image_std, latent_means, latent_std, latent_samples = \
             self.forward_conditional(image, batch_z)
 
         # likelihood term
-        # loglik_z = common_utils.get_normal_loglik(image, image_mu,
-        #                                         image_std, scale = False)
-
-        loglik_z = common_utils.get_bernoulli_loglik(image_mu, image)
+        if self.normal_likelihood:
+            loglik_z = common_utils.get_normal_loglik(image, image_mu,
+                                                     image_std, scale = False)
+        else:
+            loglik_z = common_utils.get_bernoulli_loglik(image_mu, image)
 
         if not(np.all(np.isfinite(loglik_z.detach().cpu().numpy()))):
             print(z)
@@ -248,48 +267,46 @@ class HandwritingVAE(nn.Module):
 
         return -loglik_z + kl_q_latent
 
-    def _sample_class_weights(self, class_weights, num_reinforced):
-        # sample z indices, but only for those with k the smallest
-        # smallest class weights (k = num_reinforced)
-
-        assert num_reinforced <= class_weights.shape[1]
-
-        # get the k smallest weights, and the indices to which they correspond
-        class_weights_topk, z_sample_domain = \
-            torch.topk(-class_weights, num_reinforced)
-
-        # in the future, we also need the indices not sampled
-        if not num_reinforced == class_weights.shape[1]:
-            unsampled_weight, unsampled_z_domain = torch.topk(class_weights, \
-                                        class_weights.shape[1] - num_reinforced)
-            unsampled_weight = unsampled_weight.sum(dim = 1)
-        else:
-            unsampled_z_domain = -torch.ones((class_weights.shape[0], 1)).to(device)
-            unsampled_weight = torch.zeros(class_weights.shape[0]).to(device)
-
-        class_weight_sample_conditional = torch.zeros(class_weights.shape).to(device)
-        seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])]).to(device)
-
-        for i in range(num_reinforced):
-            class_weight_sample_conditional[seq_tensor, \
-                z_sample_domain[:, i].detach()] = \
-                class_weights_topk[:, i].detach()
-
-        class_weight_sample_conditional /= \
-            class_weight_sample_conditional.sum(dim = 1, keepdim=True)
-
-        cat_rv = Categorical(probs = class_weight_sample_conditional)
-        z_sample = cat_rv.sample().detach()
-
-        return z_sample, z_sample_domain, class_weight_sample_conditional, \
-                    unsampled_z_domain, unsampled_weight
-
+    # def _sample_class_weights(self, class_weights, num_reinforced):
+    #     # sample z indices, but only for those with k the smallest
+    #     # smallest class weights (k = num_reinforced)
+    #
+    #     assert num_reinforced <= class_weights.shape[1]
+    #
+    #     # get the k smallest weights, and the indices to which they correspond
+    #     class_weights_topk, z_sample_domain = \
+    #         torch.topk(-class_weights, num_reinforced)
+    #
+    #     # in the future, we also need the indices not sampled
+    #     if not num_reinforced == class_weights.shape[1]:
+    #         unsampled_weight, unsampled_z_domain = torch.topk(class_weights, \
+    #                                     class_weights.shape[1] - num_reinforced)
+    #         unsampled_weight = unsampled_weight.sum(dim = 1)
+    #     else:
+    #         unsampled_z_domain = -torch.ones((class_weights.shape[0], 1)).to(device)
+    #         unsampled_weight = torch.zeros(class_weights.shape[0]).to(device)
+    #
+    #     class_weight_sample_conditional = torch.zeros(class_weights.shape).to(device)
+    #     seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])]).to(device)
+    #
+    #     for i in range(num_reinforced):
+    #         class_weight_sample_conditional[seq_tensor, \
+    #             z_sample_domain[:, i].detach()] = \
+    #             class_weights_topk[:, i].detach()
+    #
+    #     class_weight_sample_conditional /= \
+    #         class_weight_sample_conditional.sum(dim = 1, keepdim=True)
+    #
+    #     cat_rv = Categorical(probs = class_weight_sample_conditional)
+    #     z_sample = cat_rv.sample().detach()
+    #
+    #     return z_sample, z_sample_domain, class_weight_sample_conditional, \
+    #                 unsampled_z_domain, unsampled_weight
+    #
     def loss(self, image, true_class_labels = None,
                     num_reinforced = 0):
 
-        # latent_means, latent_std, latent_samples, computed_class_weights = \
-        #     self.encoder_forward(image)
-
+        # Get class weights
         computed_class_weights = self.classifier(image)
 
         if true_class_labels is not None:
@@ -302,17 +319,6 @@ class HandwritingVAE(nn.Module):
         else:
             class_weights = computed_class_weights
 
-        # likelihood term
-        loss = 0.0
-        ps_loss = 0.0
-
-        if num_reinforced > 0:
-            class_weights_ = class_weights.detach() + 1e-3
-            class_weights_ /= class_weights_.sum(dim = 1, keepdim = True)
-            z_sample, z_sample_domain, class_weight_sample_conditional, \
-                        unsampled_z_domain, unsampled_weights = \
-                        self._sample_class_weights(class_weights_,
-                                                    num_reinforced)
 
         if self.use_baseline:
             # compute baseline here.
@@ -324,44 +330,13 @@ class HandwritingVAE(nn.Module):
         else:
             baseline = 0.0
 
-            # print('class_weights', class_weights[0, :])
-            # print('z_sample', z_sample)
-
-        for z in range(self.n_classes):
-            conditional_loss = self.get_conditional_loss(image, z)
-            loss += (class_weights[:, z] * conditional_loss).sum()
-
-            if num_reinforced > 0:
-                # if its not sampled, just use class weights
-                mask_unsample = np.zeros(len(z_sample))
-                mask_unsample[(unsampled_z_domain.cpu().numpy() == z).sum(axis = 1)] = 1
-                mask_unsample = torch.from_numpy(mask_unsample).float().to(device).detach()
-                ps_loss += (class_weights[:, z] * conditional_loss * mask_unsample).sum()
-
-                # if its in the reinforce sample, use the sample
-                mask_sample = np.zeros(len(z_sample))
-                mask_sample[z_sample.cpu().numpy() == z] = 1
-                mask_sample = torch.from_numpy(mask_sample).float().to(device).detach()
-
-                # grad q term
-                grad_q = (conditional_loss.detach()  - baseline.detach()) * \
-                    torch.log(class_weights[:, z] + 1e-8) * mask_sample
-
-                grad_l = conditional_loss * mask_sample
-
-                ps_loss += ((1 - unsampled_weights) * (grad_q + grad_l)).sum()
-
-                # ps_loss += (1 - unsampled_weights) * \
-                #     ((conditional_loss.detach()  - baseline.detach()) * \
-                #     torch.log(class_weights[:, z] + 1e-8) * mask_sample + \
-                #     conditional_loss * mask_sample).sum()
-
-                if self.use_baseline:
-                    ps_loss += ((conditional_loss.detach() - baseline)**2).sum()
-
-            else:
-                ps_loss = loss
-
+        # Get the loss
+        loss, ps_loss = compute_loss_from_conditional_loss(image, class_weights,
+                                            self.n_classes,
+                                            self.get_conditional_loss,
+                                            num_reinforced,
+                                            self.use_baseline,
+                                            baseline)
 
         # kl term for class weights
         # (assuming uniform prior)
@@ -376,8 +351,9 @@ class HandwritingVAE(nn.Module):
                 assert np.isfinite(kl_q_z.detach().cpu().numpy())
 
         loss += kl_q_z
+        ps_loss += kl_q_z
 
-        return loss / image.size()[0], computed_class_weights, ps_loss
+        return loss / image.size()[0], computed_class_weights, ps_loss / image.size()[0]
 
     def get_class_label_cross_entropy(self, class_weights, labels):
         return torch.sum(
@@ -547,6 +523,101 @@ class HandwritingVAE(nn.Module):
     #         np.savetxt(outfile + 'loss_array.txt', loss_array)
 
 
+def sample_class_weights(class_weights, num_reinforced):
+    # sample z indices, but only for those with k the smallest
+    # smallest class weights (k = num_reinforced)
+
+    assert num_reinforced <= class_weights.shape[1]
+
+    # get the k smallest weights, and the indices to which they correspond
+    class_weights_topk, z_sample_domain = \
+        torch.topk(-class_weights, num_reinforced)
+
+    # in the future, we also need the indices not sampled
+    if not num_reinforced == class_weights.shape[1]:
+        unsampled_weight, unsampled_z_domain = torch.topk(class_weights, \
+                                    class_weights.shape[1] - num_reinforced)
+        unsampled_weight = unsampled_weight.sum(dim = 1)
+    else:
+        unsampled_z_domain = -torch.ones((class_weights.shape[0], 1)).to(device)
+        unsampled_weight = torch.zeros(class_weights.shape[0]).to(device)
+
+    class_weight_sample_conditional = torch.zeros(class_weights.shape).to(device)
+    seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])]).to(device)
+
+    for i in range(num_reinforced):
+        class_weight_sample_conditional[seq_tensor, \
+            z_sample_domain[:, i].detach()] = \
+            class_weights_topk[:, i].detach()
+
+    class_weight_sample_conditional /= \
+        class_weight_sample_conditional.sum(dim = 1, keepdim=True)
+
+    cat_rv = Categorical(probs = class_weight_sample_conditional)
+    z_sample = cat_rv.sample().detach()
+
+    # the outputs:
+    # z_sample, the sampled class labels;
+    # z_sample_domain, the domain from which z_sample was chosen
+    # class_weight_sample_conditional, the probabilities from which z_sample was chosen
+    # unsampled z domain: the complement of z_sampel domain
+    # unsampled_weight: the original sum of the unsampled weights
+    return z_sample, z_sample_domain, class_weight_sample_conditional, \
+                unsampled_z_domain, unsampled_weight
+
+def compute_loss_from_conditional_loss(image, class_weights,
+                                    n_classes,
+                                    get_conditional_loss,
+                                    num_reinforced,
+                                    use_baseline,
+                                    baseline):
+
+    # compute full loss, given a function to compute conditional loss
+
+    # sample zs
+    if num_reinforced > 0:
+        class_weights_ = class_weights.detach() + 1e-3
+        class_weights_ /= class_weights_.sum(dim = 1, keepdim = True)
+        z_sample, z_sample_domain, class_weight_sample_conditional, \
+                    unsampled_z_domain, unsampled_weights = \
+                    sample_class_weights(class_weights_,
+                                                num_reinforced)
+    ps_loss = 0.0
+    loss = 0.0
+
+    for z in range(n_classes):
+        conditional_loss = get_conditional_loss(image, z)
+        loss += (class_weights[:, z] * conditional_loss).sum()
+
+        if num_reinforced > 0:
+            # if its not sampled, just use class weights
+            mask_unsample = np.zeros(len(z_sample))
+            mask_unsample[(unsampled_z_domain.cpu().numpy() == z).sum(axis = 1)] = 1
+            mask_unsample = torch.from_numpy(mask_unsample).float().to(device).detach()
+            ps_loss += (class_weights[:, z] * conditional_loss * mask_unsample).sum()
+
+            # if its in the reinforce sample, use the sample
+            mask_sample = np.zeros(len(z_sample))
+            mask_sample[z_sample.cpu().numpy() == z] = 1
+            mask_sample = torch.from_numpy(mask_sample).float().to(device).detach()
+
+            # grad q term
+            grad_q = (conditional_loss.detach()  - baseline.detach()) * \
+                torch.log(class_weights[:, z] + 1e-8) * mask_sample
+
+            grad_l = conditional_loss * mask_sample
+
+            ps_loss += ((1 - unsampled_weights) * (grad_q + grad_l)).sum()
+
+            if use_baseline:
+                ps_loss += ((conditional_loss.detach() - baseline)**2).sum()
+
+        else:
+            ps_loss = loss
+
+    return loss, ps_loss
+
+
 ######################################
 # FUNCTIONS TO TRAIN SEMI-SUPERVISED MODEL
 ######################################
@@ -603,42 +674,12 @@ def eval_semi_supervised_loss(vae, loader_unlabeled,
 
     return avg_semisuper_loss, avg_unlabeled_loss
 
-def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labels,
+def train_semisupervised_model(vae, optimizer,
+                    train_loader_unlabeled, labeled_images, labels,
                     test_loader, alpha = 0.01, num_reinforced = 0,
                     outfile = './mnist_vae_semisupervised',
                     n_epoch = 200, print_every = 10, save_every = 20,
-                    weight_decay = 1e-6, lr = 0.001,
-                    save_final_enc = True,
-                    train_classifier_only = False):
-
-    # define optimizer
-    if train_classifier_only:
-        # for debugging only
-        optimizer = optim.Adam([
-                {'params': vae.classifier.parameters(), 'lr': lr}],
-                weight_decay=weight_decay)
-
-        if vae.use_baseline:
-            optimizer = optim.Adam([
-                    {'params': vae.classifier.parameters(), 'lr': lr},
-                    {'params': vae.baseline_learner.parameters(), 'lr': lr}],
-                    weight_decay=weight_decay)
-
-    else:
-        optimizer = optim.Adam([
-                {'params': vae.classifier.parameters(), 'lr': lr},
-                {'params': vae.encoder.parameters(), 'lr': lr},
-                {'params': vae.decoder.parameters(), 'lr': lr}],
-                weight_decay=weight_decay)
-
-        if vae.use_baseline:
-            optimizer = optim.Adam([
-                    {'params': vae.classifier.parameters(), 'lr': lr},
-                    {'params': vae.encoder.parameters(), 'lr': lr},
-                    {'params': vae.decoder.parameters(), 'lr': lr},
-                    {'params': vae.baseline_learner.parameters(), 'lr': lr}],
-                    weight_decay=weight_decay)
-
+                    save_final_enc = True):
 
     iter_array = []
     train_loss_array = []
@@ -651,8 +692,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     print('  * init train recon loss: {:.10g};'.format(train_loss))
     print('  * init test recon loss: {:.10g};'.format(test_loss))
 
-    train_class_accuracy = eval_classification_accuracy(vae.classifier, train_loader_unlabeled)
-    test_class_accuracy = eval_classification_accuracy(vae.classifier, test_loader)
+    train_class_accuracy = common_utils.get_classification_accuracy(train_loader_unlabeled, vae.classifier)[0]
+    test_class_accuracy = common_utils.get_classification_accuracy(test_loader, vae.classifier)[0]
 
     print('  * init train class accuracy: {:.4g};'.format(train_class_accuracy))
     print('  * init test class accuracy: {:4g};'.format(test_class_accuracy))
@@ -686,8 +727,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
             print('  * train recon loss: {:.10g};'.format(train_loss))
             print('  * test recon loss: {:.10g};'.format(test_loss))
 
-            train_class_accuracy = eval_classification_accuracy(vae.classifier, train_loader_unlabeled)
-            test_class_accuracy = eval_classification_accuracy(vae.classifier, test_loader)
+            train_class_accuracy = common_utils.get_classification_accuracy(train_loader_unlabeled, vae.classifier)[0]
+            test_class_accuracy = common_utils.get_classification_accuracy(test_loader, vae.classifier,)[0]
 
             print('  * train class accuracy: {:.4g};'.format(train_class_accuracy))
             print('  * test class accuracy: {:4g};'.format(test_class_accuracy))

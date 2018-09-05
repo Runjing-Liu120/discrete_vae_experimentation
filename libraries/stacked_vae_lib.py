@@ -14,23 +14,24 @@ import timeit
 
 from copy import deepcopy
 
-from mnist_vae_lib import MLPEncoder, MLPConditionalDecoder
+import mnist_vae_lib
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class Model1VAE(nn.Module):
-    def __init__(self, latent_dim = 36,
+    def __init__(self, sqrt_latent_dim = 6,
                     slen = 28):
         super(Model1VAE, self).__init__()
 
-        self.latent_dim = latent_dim
+        self.sqrt_latent_dim = sqrt_latent_dim
+        self.latent_dim = sqrt_latent_dim ** 2
         self.slen = slen
 
-        self.encoder = MLPEncoder(latent_dim = latent_dim,
+        self.encoder = mnist_vae_lib.MLPEncoder(latent_dim = self.latent_dim,
                                     slen = slen,
                                     n_classes = 0)
 
-        self.decoder = MLPConditionalDecoder(latent_dim = latent_dim,
+        self.decoder = mnist_vae_lib.MLPConditionalDecoder(latent_dim = self.latent_dim,
                                             n_classes = 0,
                                             slen = slen)
 
@@ -41,7 +42,7 @@ class Model1VAE(nn.Module):
             torch.randn(latent_means.shape).to(device) * latent_std + \
                                                             latent_means
 
-        recon_mean = self.decoder(latent_samples, z = None)
+        recon_mean, _ = self.decoder(latent_samples, z = None)
 
         return recon_mean, latent_means, latent_std, latent_samples
 
@@ -160,3 +161,71 @@ class Model1VAE(nn.Module):
             loss_array[2, :] = test_loss_array
 
             np.savetxt(outfile + 'loss_array.txt', loss_array)
+
+class StackedModelVAE(nn.Module):
+    def __init__(self, model1_vae,
+                    m2_latent_dim = 36,
+                    n_classes = 10,
+                    use_baseline = False):
+
+        super(StackedModelVAE, self).__init__()
+
+        self.model1_vae = model1_vae
+        self.model1_latent_dim = model1_vae.latent_dim
+        self.slen = model1_vae.slen
+
+        self.n_classes = n_classes
+
+        # this is just a weird quirk for how the model2 vae got setup ...
+
+        self.model2_vae = mnist_vae_lib.HandwritingVAE(latent_dim = m2_latent_dim,
+                        n_classes = n_classes,
+                        slen = self.model1_vae.sqrt_latent_dim,
+                        use_baseline = False,
+                        normal_likelihood = False)
+
+    def model1_encoder_forward(self, image):
+        # pass through model 1 encoder
+        latent1_mean, latent1_std = self.model1_vae.encoder(image)
+
+        # sample
+        latent1_samples = \
+            torch.randn(latent1_mean.shape).to(device) * latent1_std + \
+                                                            latent1_mean
+
+        return latent1_mean, latent1_std, latent1_samples
+
+
+    def loss(self, image, true_class_labels = None,
+                    num_reinforced = 0):
+
+        latent1_mean, latent1_std, latent1_samples = \
+            self.model1_encoder_forward(image)
+
+        loss, computed_class_weights, ps_loss = self.model2_vae.loss(image,
+                        true_class_labels = true_class_labels,
+                        num_reinforced = num_reinforced)
+
+        return loss, computed_class_weights, ps_loss
+
+    def get_semisupervised_loss(self, unlabeled_images, num_unlabeled_total,
+                                    labeled_images = None, labels = None,
+                                    alpha = 1.0, num_reinforced = 0):
+
+        latent1_mean_unlab, latent1_std_unlab, latent1_samples_unlab = \
+            self.model1_encoder_forward(unlabeled_images)
+
+        if labeled_images is not None:
+            latent1_mean_lab, latent1_std_lab, latent1_samples_lab = \
+                self.model1_encoder_forward(labeled_images)
+        else:
+            latent1_mean_lab = None
+            latent1_std_lab = None
+            latent1_samples_lab = None
+
+        return self.model2_vae.get_semisupervised_loss(latent1_mean_unlab,
+                                        num_unlabeled_total,
+                                        labeled_images = latent1_samples_lab,
+                                        labels = labels,
+                                        alpha = alpha,
+                                        num_reinforced = num_reinforced)
