@@ -23,9 +23,9 @@ parser = argparse.ArgumentParser(description='FullVAE')
 
 parser.add_argument('--mnist_data_dir', type = str,
                     default='../mnist_data/')
-parser.add_argument('--args.sqrt_latent_dim1', type=int, default=5, metavar='N',
+parser.add_argument('--sqrt_latent_dim1', type=int, default=5, metavar='N',
                     help='latent dimension (default = 5)')
-parser.add_argument('--args.latent_dim2', type=int, default=5, metavar='N',
+parser.add_argument('--latent_dim2', type=int, default=5, metavar='N',
                     help='latent dimension (default = 5)')
 
 parser.add_argument('--model1_enc_init', type=str,
