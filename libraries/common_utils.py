@@ -71,6 +71,9 @@ def get_classification_accuracy(loader, classifier,
                                     return_wrong_images = False,
                                     max_images = 1000):
 
+    # classifier should take images in the loader and return
+    # class weights
+
     n_images = 0.0
     accuracy = 0.0
 

@@ -182,8 +182,8 @@ class StackedModelVAE(nn.Module):
         self.model2_vae = mnist_vae_lib.HandwritingVAE(latent_dim = m2_latent_dim,
                         n_classes = n_classes,
                         slen = self.model1_vae.sqrt_latent_dim,
-                        use_baseline = False,
-                        normal_likelihood = use_baseline)
+                        use_baseline = use_baseline,
+                        normal_likelihood = True)
 
 
     def classifier(self, image):
