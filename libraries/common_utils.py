@@ -82,20 +82,23 @@ def get_classification_accuracy(loader, classifier,
     wrong_labels = torch.LongTensor(0)
 
     for batch_idx, data in enumerate(loader):
-        class_weights = classifier(data['image'])
+        image = data['image'].to(device)
+        label = data['label'].to(device)
+
+        class_weights = classifier(image)
 
         z_ind = torch.argmax(class_weights, dim = 1)
 
-        accuracy += torch.sum(z_ind == data['label']).float()
+        accuracy += torch.sum(z_ind == label).float()
         # print(accuracy)
 
         if return_wrong_images:
-            wrong_indx = 1 - (z_ind == data['label'])
+            wrong_indx = 1 - (z_ind == label)
             wrong_images = torch.cat((wrong_images,
-                                    data['image'][wrong_indx, :, :]),
+                                    image[wrong_indx, :, :]),
                                     dim = 0)
             wrong_labels = torch.cat((wrong_labels,
-                                data['label'][wrong_indx]))
+                                label[wrong_indx]))
         else:
             wrong_images = None
             wrong_labels = None
