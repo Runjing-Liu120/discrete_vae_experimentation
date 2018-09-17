@@ -33,7 +33,7 @@ def get_log_prob(e_b, draw):
     return torch.log(e_b + 1e-12) * torch.sum(draw) + \
                 torch.log(1 - e_b + 1e-12) * torch.sum(1 - draw)
 
-def get_reinforce_ps_loss(phi, p0):
+def get_reinforce_ps_loss(phi, p0, reinforce = False):
     # returns pseudoloss: loss whose gradient is unbiased for the
     # true gradient
 
@@ -43,6 +43,13 @@ def get_reinforce_ps_loss(phi, p0):
     bn_rv = Bernoulli(probs = torch.ones(d) * e_b)
     binary_samples = bn_rv.sample().detach()
     # binary_samples = (torch.rand(d) > e_b).float().detach()
+
+    if reinforce:
+        binary_samples_ = bn_rv.sample().detach()
+        baseline = torch.sum((binary_samples_ - p0)**2)
+
+    else:
+        baseline = 0.0
 
     sampled_loss = torch.sum((binary_samples - p0)**2)
 
@@ -56,7 +63,7 @@ def get_reinforce_ps_loss(phi, p0):
     #
     sampled_log_q = get_log_prob(e_b, binary_samples)
 
-    ps_loss = sampled_loss.detach() * sampled_log_q
+    ps_loss = (sampled_loss - baseline).detach() * sampled_log_q
 
     return ps_loss
 
