@@ -41,57 +41,81 @@ def get_concentrated_mask(class_weights, alpha, topk):
     return mask_alpha * mask_topk
 
 
-class PartialMarginalizationObjective(object):
+class PartialMarginalizationREINFORCE(object):
     def __init__(self, f_z,
-                        get_ps_loss_from_sample,
                         var_params,
-                        get_class_weights_from_var_params):
+                        get_log_q_from_var_params):
 
         self.f_z = f_z
 
-        self.var_params = deepcopy(var_params)
-        self.get_class_weights_from_var_params = \
-                    get_class_weights_from_var_params
+        self.set_var_params(var_params)
 
-        self.get_ps_loss_from_sample = get_ps_loss_from_sample
+        self.get_log_q_from_var_params = \
+                    get_log_q_from_var_params
 
     def set_var_params(self, var_params):
         self.var_params = deepcopy(var_params)
 
-    def get_class_weights(self):
-        return self.get_class_weights_from_var_params(self.var_params)
+    def get_log_q(self):
+        log_q = self.get_log_q_from_var_params(self.var_params)
+        self.class_weights = torch.exp(log_q.detach())
+        return log_q
 
-    def get_full_loss(self):
-        class_weights = self.get_class_weights()
+    def get_full_loss(self, diffble = False):
+        log_q = self.get_log_q()
+
+        if diffble:
+            class_weights = torch.exp(log_q)
+        else:
+            class_weights = self.class_weights
 
         full_loss = 0.0
         for i in range(len(class_weights)):
             full_loss = full_loss + class_weights[i] * self.f_z(i)
 
-        return torch.sum(full_loss * class_weights)
+        return full_loss
 
-    def get_partial_marginal_loss(self, alpha, topk):
-        class_weights = self.get_class_weights()
+    def get_reinforce_grad_sample(self, i, log_q, use_baseline = False):
+        if use_baseline:
+            z_sample2 = sample_class_weights(self.class_weights)
+            baseline = self.f_z(z_sample2)
+        else:
+            baseline = 0.0
 
-        concentrated_mask = get_concentrated_mask(class_weights, alpha, topk)
+        return (self.f_z(i) - baseline) * log_q[i]
 
-        # summed term
+    def get_partial_marginal_loss(self, alpha, topk, use_baseline = False):
+        # class weights from the variational distribution
+        log_q = self.get_log_q()
+
+        # this is the indicator C_\alpha
+        concentrated_mask = get_concentrated_mask(self.class_weights, alpha, topk)
+        concentrated_mask = concentrated_mask.float().detach()
+
+        # the summed term
         summed_term = torch.Tensor([0.])
         summed_term.requires_grad_(True)
-        # print(concentrated_mask)
         for i in range(len(concentrated_mask)):
             if concentrated_mask[i] == 1:
-                summed_term = summed_term + self.f_z(i) * class_weights[i]
+                summed_term = summed_term + self.get_reinforce_grad_sample(i, log_q, use_baseline) * self.class_weights[i]
 
         # sampled term
-        z_sample = sample_class_weights(class_weights)
-        # sampled_term = self.get_ps_loss_from_sample(self.var_params, z_sample) * \
-        #                         (concentrated_mask[z_sample] == 0.).float().detach()
-        sampled_term = self.get_ps_loss_from_sample(self.var_params, z_sample, concentrated_mask)
+        sampled_weight = torch.sum(self.class_weights * (1 - concentrated_mask))
+        if torch.sum(1 - concentrated_mask) > 0:
+            conditional_class_weights = \
+                self.class_weights * (1 - concentrated_mask) / sampled_weight
+            conditional_z_sample = sample_class_weights(conditional_class_weights)
 
-        return sampled_term + summed_term
+            # just for my own sanity ...
+            assert (1 - concentrated_mask)[conditional_z_sample] == 1.
 
-    def run_SGD(self, init_var_params, alpha, topk, lr = 1.0, n_steps = 10000):
+            sampled_term = self.get_reinforce_grad_sample(conditional_z_sample, log_q, use_baseline)
+        else:
+            sampled_term = 0.
+
+        return sampled_term * sampled_weight + summed_term
+
+    def run_SGD(self, init_var_params, alpha, topk, lr = 1.0, n_steps = 10000, use_baseline = False):
         self.set_var_params(init_var_params)
         init_loss = self.get_full_loss()
 
@@ -109,7 +133,7 @@ class PartialMarginalizationObjective(object):
             # run gradient descent
             optimizer.zero_grad()
             # ps_loss = self.get_partial_marginal_loss(alpha, topk)
-            ps_loss = self.get_partial_marginal_loss(alpha, topk)
+            ps_loss = self.get_partial_marginal_loss(alpha, topk, use_baseline)
             ps_loss.backward()
             optimizer.step()
 

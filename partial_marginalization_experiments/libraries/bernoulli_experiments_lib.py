@@ -64,23 +64,22 @@ class BernoulliExperiments(object):
         e_b = sigmoid(phi)
         return get_bernoulli_log_prob(e_b, self.draw_array[i])
 
-    def get_sampled_reinforce_ps_loss(self, phi, i, concentrated_mask):
-        # after drawing i, compute the reinforce pseudoloss
-        return self.get_bernoulli_log_prob_i(phi, i) * \
-                            self.get_loss_from_draw_i(i) * \
-                            (concentrated_mask[i] == 0.).float().detach()
-
-    def get_sampled_reinforce_cv_ps_loss(self, phi, i, concentrated_mask):
-        # after drawing i, compute the reinforce pseudoloss
-        # with control variate
-
-        # compute control variate
-        bern_probs = self.get_bernoulli_prob_vec(phi)
-        cat_rv = Categorical(probs = bern_probs)
-        z_sample = cat_rv.sample().detach()
-        cv = self.get_loss_from_draw_i(z_sample) * (concentrated_mask[z_sample] == 0.).float().detach()
-
-        # the actual loss at i
-        f_z = self.get_loss_from_draw_i(i) * (concentrated_mask[i] == 0.).float().detach()
-
-        return self.get_bernoulli_log_prob_i(phi, i) * (f_z - cv).detach()
+    # def get_sampled_reinforce_ps_loss(self, phi, i):
+    #     # after drawing i, compute the reinforce pseudoloss
+    #     return self.get_bernoulli_log_prob_i(phi, i) * \
+    #                 self.get_loss_from_draw_i(i)
+    #
+    # def get_sampled_reinforce_cv_ps_loss(self, phi, i, concentrated_mask):
+    #     # after drawing i, compute the reinforce pseudoloss
+    #     # with control variate
+    #
+    #     # compute control variate
+    #     bern_probs = self.get_bernoulli_prob_vec(phi)
+    #     cat_rv = Categorical(probs = bern_probs)
+    #     z_sample = cat_rv.sample().detach()
+    #     cv = self.get_loss_from_draw_i(z_sample) * (concentrated_mask[z_sample] == 0.).float().detach()
+    #
+    #     # the actual loss at i
+    #     f_z = self.get_loss_from_draw_i(i) * (concentrated_mask[i] == 0.).float().detach()
+    #
+    #     return self.get_bernoulli_log_prob_i(phi, i) * (f_z - cv).detach()
