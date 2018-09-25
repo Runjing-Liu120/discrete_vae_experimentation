@@ -87,9 +87,14 @@ class GMMExperiments(object):
 
     def set_random_var_params(self):
         init_mu = torch.randn((self.n_clusters, self.dim)) * self.sigma0 + self.mu0
+        init_mu.requires_grad_(True)
+
         init_sigma = torch.rand(1)
+        init_sigma.requires_grad_(True)
 
         self.set_var_params(init_mu, init_sigma)
+
+        return init_mu, init_sigma
 
     def set_true_params(self):
         # draw means from the prior
@@ -116,7 +121,7 @@ class GMMExperiments(object):
 
         return y, z
 
-    def get_log_class_weights(self):
+    def get_log_q(self):
         self.log_class_weights = torch.log(self.gmm_encoder.forward(self.y))
         return self.log_class_weights
 
@@ -126,7 +131,7 @@ class GMMExperiments(object):
 
         return mask
 
-    def get_loss_conditional_z(self, z):
+    def f_z(self, z):
         centroids = self.var_params['centroids']
         sigma = self.var_params['sigma']
 

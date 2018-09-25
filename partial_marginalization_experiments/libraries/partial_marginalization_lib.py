@@ -48,23 +48,17 @@ def get_concentrated_mask(class_weights, alpha, topk):
 
 
 class PartialMarginalizationREINFORCE(object):
-    def __init__(self, f_z,
-                        var_params,
-                        get_log_q_from_var_params):
+    def __init__(self, experiment_class):
 
-        self.f_z = f_z
+        self.experiment_class = experiment_class
 
-        self.set_var_params(var_params)
+    # def set_var_params(self, var_params):
+    #     self.experiment_class.var_params = var_params
 
-        self.get_log_q_from_var_params = \
-                    get_log_q_from_var_params
-
-    def set_var_params(self, var_params):
-        self.var_params = deepcopy(var_params)
-
-    def get_log_q(self):
-        log_q = self.get_log_q_from_var_params(self.var_params)
+    def set_and_get_log_q(self):
+        log_q = self.experiment_class.get_log_q()
         self.class_weights = torch.exp(log_q.detach())
+
         return log_q
 
     # def get_full_loss(self, diffble = False):
@@ -84,7 +78,7 @@ class PartialMarginalizationREINFORCE(object):
     def get_reinforce_grad_sample(self, f_z_i, log_q_i, use_baseline = False):
         if use_baseline:
             z_sample2 = sample_class_weights(self.class_weights)
-            baseline = self.f_z(z_sample2)
+            baseline = self.experiment_class.f_z(z_sample2)
         else:
             baseline = 0.0
 
@@ -94,7 +88,7 @@ class PartialMarginalizationREINFORCE(object):
                                     use_baseline = False,
                                     return_full_loss = True):
         # class weights from the variational distribution
-        log_q = self.get_log_q()
+        log_q = self.set_and_get_log_q()
 
         # this is the indicator C_\alpha
         concentrated_mask = get_concentrated_mask(self.class_weights, alpha, topk)
@@ -108,7 +102,7 @@ class PartialMarginalizationREINFORCE(object):
 
         for i in range(concentrated_mask.shape[1]):
 
-            f_z_i = self.f_z(i)
+            f_z_i = self.experiment_class.f_z(i)
             log_q_i = log_q[:, i]
 
             summed_term_ = \
@@ -124,34 +118,42 @@ class PartialMarginalizationREINFORCE(object):
         sampled_weight = torch.sum(self.class_weights * (1 - concentrated_mask))
         if torch.sum(1 - concentrated_mask) > 0:
             conditional_class_weights = \
-                self.class_weights * (1 - concentrated_mask) / sampled_weight
+                self.class_weights * (1 - concentrated_mask) / (sampled_weight + 1e-12)
             conditional_z_sample = sample_class_weights(conditional_class_weights)
 
             # just for my own sanity ...
-            assert (1 - concentrated_mask)[0, conditional_z_sample] == 1.
+            seq_tensor = torch.LongTensor([i for i in range(self.class_weights.shape[0])])
+            assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].numpy() == 1.)
 
-            f_z_i_sample = self.f_z(conditional_z_sample)
+            f_z_i_sample = self.experiment_class.f_z(conditional_z_sample)
             log_q_i_sample = log_q[:, conditional_z_sample]
-            sampled_term = self.get_reinforce_grad_sample(f_z_i_sample, log_q_i_sample, use_baseline)
+            sampled_term = self.get_reinforce_grad_sample(f_z_i_sample, log_q_i_sample, use_baseline).sum()
+
         else:
             sampled_term = 0.
 
         return sampled_term * sampled_weight + summed_term, full_loss
 
-    def run_SGD(self, init_var_params, alpha, topk, lr = 1.0, n_steps = 10000, use_baseline = False):
-        self.set_var_params(init_var_params)
+    def run_SGD(self, alpha, topk, init_var_params = None,
+                    lr = 1.0, n_steps = 10000, use_baseline = False):
+
+        if init_var_params is not None:
+            self.experiment_class.set_var_params(init_var_params)
+        else:
+            self.experiment_class.set_random_var_params()
 
         _, init_loss = self.get_partial_marginal_loss(alpha, topk, use_baseline)
 
         # set up optimizer
-        params = [self.var_params]
+        # params = [self.experiment_class.var_params]
+        params = [{'params': self.experiment_class.var_params[key]} for key in self.experiment_class.var_params]
         optimizer = optim.SGD(params, lr = lr)
 
         loss_array = np.zeros(n_steps + 1)
-        phi_array = np.zeros(n_steps + 1)
+        # phi_array = np.zeros(n_steps + 1)
 
         loss_array[0] = init_loss.detach().numpy()
-        phi_array[0] = init_var_params.detach().numpy()
+        # phi_array[0] = init_var_params.detach().numpy()
 
         for i in range(n_steps):
             # run gradient descent
@@ -165,6 +167,8 @@ class PartialMarginalizationREINFORCE(object):
             # save losses
             # loss = self.get_full_loss()
             loss_array[i + 1] = loss.detach().numpy()
-            phi_array[i + 1] = self.var_params.detach().numpy()
+            # phi_array[i + 1] = self.experiment_class.var_params.detach().numpy()
 
-        return loss_array, phi_array
+        var_param_opt = self.experiment_class.var_params
+
+        return var_param_opt, loss_array

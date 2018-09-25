@@ -24,11 +24,16 @@ def get_bernoulli_log_prob(e_b, draw):
 
 # class to run Bernoulli Experiments
 class BernoulliExperiments(object):
-    def __init__(self, p0, dim):
+    def __init__(self, p0, dim, phi0):
         self.p0 = p0
         self.dim = dim
 
         self.set_draw_array()
+
+        self.var_params = {'phi': deepcopy(phi0)}
+
+    def set_var_params(self, phi): 
+        self.var_params = {'phi': deepcopy(phi)}
 
     def set_draw_array(self):
         # defines the 2**d vector of possible combinations
@@ -39,15 +44,15 @@ class BernoulliExperiments(object):
             draw_tensor = torch.Tensor(draw)
             self.draw_array.append(draw_tensor)
 
-    def get_loss_from_draw_i(self, i):
+    def f_z(self, i):
         # returns the loss for the ith entry in draw array
         return torch.sum((self.draw_array[i] - self.p0) ** 2)
 
-    def get_bernoulli_log_prob_vec(self, phi):
+    def get_log_q(self):
         # returns a vector of log probabilities for all the possible draws
         log_probs = torch.zeros((1, len(self.draw_array)))
 
-        e_b = sigmoid(phi)
+        e_b = sigmoid(self.var_params['phi'])
 
         for i in range(len(self.draw_array)):
             draw_tensor = torch.Tensor(self.draw_array[i])
@@ -55,13 +60,13 @@ class BernoulliExperiments(object):
 
         return log_probs
 
-    def get_bernoulli_prob_vec(self, phi):
+    def get_bernoulli_prob_vec(self):
         # returns a vector of probabilities for all the possible draws
-        return torch.exp(self.get_bernoulli_log_prob_vec(phi))
+        return torch.exp(self.get_bernoulli_log_prob_vec())
 
-    def get_bernoulli_log_prob_i(self, phi, i):
+    def get_bernoulli_log_prob_i(self, i):
         # returns the log probabilitie for draw i
-        e_b = sigmoid(phi)
+        e_b = sigmoid(self.var_params['phi'])
         return get_bernoulli_log_prob(e_b, self.draw_array[i])
 
     # def get_sampled_reinforce_ps_loss(self, phi, i):
