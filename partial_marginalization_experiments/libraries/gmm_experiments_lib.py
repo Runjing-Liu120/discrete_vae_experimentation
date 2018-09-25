@@ -111,22 +111,34 @@ class GMMExperiments(object):
             # observed data
             y[i, :] = self.true_mus[z_sample, :] + torch.randn(2) * self.true_sigma
 
+        # some indices we cache and use later
+        self.seq_tensor = torch.LongTensor([i for i in range(n_obs)])
+
         return y, z
 
     def get_log_class_weights(self):
         self.log_class_weights = torch.log(self.gmm_encoder.forward(self.y))
         return self.log_class_weights
 
+    def _get_centroid_mask(self, z):
+        mask = torch.zeros((self.n_obs, self.n_clusters))
+        mask[self.seq_tensor, z] = 1
+
+        return mask
+
     def get_loss_conditional_z(self, z):
         centroids = self.var_params['centroids']
         sigma = self.var_params['sigma']
 
-        loglik_z = get_normal_loglik(self.y, centroids[z, :], sigma).sum(dim = 1)
+        centroid_mask = _get_centroid_mask(z)
+        centroids_masked = torch.matmul(centroid_mask, centroids)
+
+        loglik_z = get_normal_loglik(self.y, centroids_masked, sigma).sum(dim = 1)
 
         mu_prior_term = get_normal_loglik(centroids, self.mu0, self.sigma0).sum()
 
         z_prior_term = 0.0 # torch.log(self.prior_weights[z])
 
-        z_entropy_term = - self.log_class_weights[:, z]
+        z_entropy_term = (- np.exp(self.log_class_weights) * self.log_class_weights).sum()
 
         return - (loglik_z + mu_prior_term + z_prior_term + z_entropy_term)

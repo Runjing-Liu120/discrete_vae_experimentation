@@ -45,13 +45,13 @@ class BernoulliExperiments(object):
 
     def get_bernoulli_log_prob_vec(self, phi):
         # returns a vector of log probabilities for all the possible draws
-        log_probs = torch.zeros(len(self.draw_array))
+        log_probs = torch.zeros((1, len(self.draw_array)))
 
         e_b = sigmoid(phi)
 
         for i in range(len(self.draw_array)):
             draw_tensor = torch.Tensor(self.draw_array[i])
-            log_probs[i] = get_bernoulli_log_prob(e_b, draw_tensor)
+            log_probs[0, i] = get_bernoulli_log_prob(e_b, draw_tensor)
 
         return log_probs
 
