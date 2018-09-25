@@ -58,7 +58,7 @@ class GMMExperiments(object):
 
         # prior parameters
         self.mu0 = mu0
-        self.sigma0 = sigma0
+        self.sigma0 = torch.Tensor([sigma0])
         # uniform prior on weights
         self.prior_weights = torch.ones(self.n_clusters) / self.n_clusters
 
@@ -67,7 +67,7 @@ class GMMExperiments(object):
         self.cat_rv = Categorical(probs = self.prior_weights)
 
         # the encoder
-        self.gmm_encoder = gmm_lib.GMMEncoder(data_dim = self.dim,
+        self.gmm_encoder = GMMEncoder(data_dim = self.dim,
                              n_classes = self.n_clusters,
                              hidden_dim = hidden_dim)
 
@@ -130,7 +130,7 @@ class GMMExperiments(object):
         centroids = self.var_params['centroids']
         sigma = self.var_params['sigma']
 
-        centroid_mask = _get_centroid_mask(z)
+        centroid_mask = self._get_centroid_mask(z)
         centroids_masked = torch.matmul(centroid_mask, centroids)
 
         loglik_z = get_normal_loglik(self.y, centroids_masked, sigma).sum(dim = 1)
@@ -139,6 +139,6 @@ class GMMExperiments(object):
 
         z_prior_term = 0.0 # torch.log(self.prior_weights[z])
 
-        z_entropy_term = (- np.exp(self.log_class_weights) * self.log_class_weights).sum()
+        z_entropy_term = (- torch.exp(self.log_class_weights) * self.log_class_weights).sum()
 
         return - (loglik_z + mu_prior_term + z_prior_term + z_entropy_term)
