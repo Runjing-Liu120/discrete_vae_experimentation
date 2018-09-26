@@ -16,6 +16,7 @@ from copy import deepcopy
 import itertools
 
 softmax = nn.Softmax(dim = 0)
+log_softmax = nn.LogSoftmax(dim = 1)
 
 # The variational distribution for the class labels
 class GMMEncoder(nn.Module):
@@ -33,28 +34,27 @@ class GMMEncoder(nn.Module):
         self.fc2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.fc3 = nn.Linear(self.hidden_dim, self.n_classes)
 
-        self.softmax = nn.Softmax(dim = 1)
+        self.log_softmax = nn.LogSoftmax(dim = 1)
 
-    def forward(self, image):
+    def forward(self, x):
 
         # feed through neural network
-        h = image.view(-1, self.data_dim)
+        h = F.relu(self.fc1(x))
+        h = F.relu(self.fc2(h))
+        log_class_weights = self.log_softmax(self.fc3(h))
 
-        h = F.leaky_relu(self.fc1(h))
-        h = F.leaky_relu(self.fc2(h))
-        class_weights = self.softmax(self.fc3(h))
+        return log_class_weights
 
-        return class_weights
-
-def get_normal_loglik(x, mu, sigma):
-    return - (x - mu)**2 / (2 * sigma ** 2) - torch.log(sigma)
+def get_normal_loglik(x, mu, log_sigma):
+    return - (x - mu)**2 / (2 * torch.exp(log_sigma) ** 2) - log_sigma * 0.5
 
 class GMMExperiments(object):
-    def __init__(self, n_obs, mu0, sigma0, n_clusters, hidden_dim = 200):
+    def __init__(self, n_obs, mu0, sigma0, n_clusters, hidden_dim = 30):
 
         # dimension of the problem
         self.dim = len(mu0)
         self.n_clusters = n_clusters
+        self.n_obs = n_obs
 
         # prior parameters
         self.mu0 = mu0
@@ -71,7 +71,8 @@ class GMMExperiments(object):
                              n_classes = self.n_clusters,
                              hidden_dim = hidden_dim)
 
-        self.var_params = {'encoder_params': self.gmm_encoder.parameters()}
+        # self.var_params = {'encoder_params': self.gmm_encoder.parameters()}
+
 
         # other variational paramters: we use point masses for
         # the means and variances
@@ -81,20 +82,22 @@ class GMMExperiments(object):
         self.n_obs = n_obs
         self.y, self.z = self.draw_data(n_obs = n_obs)
 
-    def set_var_params(self, init_mu, init_sigma):
+    def set_var_params(self, init_mu, init_log_sigma):
         self.var_params['centroids'] = init_mu
-        self.var_params['sigma'] = init_sigma
+        self.var_params['log_sigma'] = init_log_sigma
 
     def set_random_var_params(self):
         init_mu = torch.randn((self.n_clusters, self.dim)) * self.sigma0 + self.mu0
         init_mu.requires_grad_(True)
 
-        init_sigma = torch.rand(1)
-        init_sigma.requires_grad_(True)
+        init_log_sigma = torch.log(torch.rand(1))
+        init_log_sigma.requires_grad_(True)
 
-        self.set_var_params(init_mu, init_sigma)
+        init_free_weights = torch.rand((self.n_obs, self.n_clusters))
+        init_free_weights = init_free_weights.requires_grad_(True)
+        self.var_params = {'free_class_weights': init_free_weights}
 
-        return init_mu, init_sigma
+        self.set_var_params(init_mu, init_log_sigma)
 
     def set_true_params(self):
         # draw means from the prior
@@ -122,7 +125,8 @@ class GMMExperiments(object):
         return y, z
 
     def get_log_q(self):
-        self.log_class_weights = torch.log(self.gmm_encoder.forward(self.y))
+        # self.log_class_weights = self.gmm_encoder.forward(self.y)
+        self.log_class_weights = log_softmax(self.var_params['free_class_weights']) #
         return self.log_class_weights
 
     def _get_centroid_mask(self, z):
@@ -132,18 +136,24 @@ class GMMExperiments(object):
         return mask
 
     def f_z(self, z):
-        centroids = self.var_params['centroids']
-        sigma = self.var_params['sigma']
+        centroids = self.var_params['centroids'] #
+        log_sigma = torch.log(torch.Tensor([self.true_sigma]))  # self.var_params['log_sigma'] # #
+
+        # print('centroids', centroids.sum())
+        # print('logsigma', log_sigma)
+        # print('log_class_weights', self.log_class_weights)
 
         centroid_mask = self._get_centroid_mask(z)
         centroids_masked = torch.matmul(centroid_mask, centroids)
 
-        loglik_z = get_normal_loglik(self.y, centroids_masked, sigma).sum(dim = 1)
+        loglik_z = get_normal_loglik(self.y, centroids_masked, log_sigma).sum(dim = 1)
 
-        mu_prior_term = get_normal_loglik(centroids, self.mu0, self.sigma0).sum()
+        mu_prior_term = get_normal_loglik(centroids, self.mu0, torch.log(self.sigma0)).sum()
 
         z_prior_term = 0.0 # torch.log(self.prior_weights[z])
 
         z_entropy_term = (- torch.exp(self.log_class_weights) * self.log_class_weights).sum()
+
+        # print(z_entropy_term)
 
         return - (loglik_z + mu_prior_term + z_prior_term + z_entropy_term)

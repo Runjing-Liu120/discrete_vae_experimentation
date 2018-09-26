@@ -30,7 +30,7 @@ def get_concentrated_mask(class_weights, alpha, topk):
     # NOTE: this only works for a vector of class_weights at the moment.
 
     # boolean vector for where class_weights > alpha
-    mask_alpha = (class_weights > alpha).float().detach()
+    mask_alpha = (class_weights >= alpha).float().detach()
 
     # but if there are more than k, only take the topk
     mask_topk = torch.zeros(class_weights.shape)
@@ -40,7 +40,7 @@ def get_concentrated_mask(class_weights, alpha, topk):
     if topk > 0:
         _, topk_domain = torch.topk(class_weights, topk)
         # mask_topk[topk_domain] = 1
-
+        # print(topk_domain)
         for i in range(topk):
             mask_topk[seq_tensor, topk_domain[:, i]] = 1
 
@@ -91,6 +91,7 @@ class PartialMarginalizationREINFORCE(object):
         log_q = self.set_and_get_log_q()
 
         # this is the indicator C_\alpha
+        # print('class_weights', self.class_weights)
         concentrated_mask = get_concentrated_mask(self.class_weights, alpha, topk)
         concentrated_mask = concentrated_mask.float().detach()
 
@@ -104,7 +105,7 @@ class PartialMarginalizationREINFORCE(object):
 
             f_z_i = self.experiment_class.f_z(i)
             log_q_i = log_q[:, i]
-
+            # print('f', f_z_i)
             summed_term_ = \
                 (self.get_reinforce_grad_sample(f_z_i, log_q_i, use_baseline) * \
                 self.class_weights[:, i] * concentrated_mask[:, i]).sum()
@@ -115,10 +116,13 @@ class PartialMarginalizationREINFORCE(object):
                 full_loss = full_loss + (torch.exp(log_q_i) * f_z_i).sum()
 
         # sampled term
-        sampled_weight = torch.sum(self.class_weights * (1 - concentrated_mask))
-        if torch.sum(1 - concentrated_mask) > 0:
+        sampled_weight = torch.sum(self.class_weights * (1 - concentrated_mask), dim = 1, keepdim = True)
+        # print('concentrated_mask', concentrated_mask)
+        # if torch.sum(1 - concentrated_mask) > 0:
+        if not(topk == self.class_weights.shape[1]): 
             conditional_class_weights = \
-                self.class_weights * (1 - concentrated_mask) / (sampled_weight + 1e-12)
+                self.class_weights * (1 - concentrated_mask) / (sampled_weight)
+
             conditional_z_sample = sample_class_weights(conditional_class_weights)
 
             # just for my own sanity ...
@@ -127,26 +131,23 @@ class PartialMarginalizationREINFORCE(object):
 
             f_z_i_sample = self.experiment_class.f_z(conditional_z_sample)
             log_q_i_sample = log_q[:, conditional_z_sample]
-            sampled_term = self.get_reinforce_grad_sample(f_z_i_sample, log_q_i_sample, use_baseline).sum()
+            sampled_term = self.get_reinforce_grad_sample(f_z_i_sample, log_q_i_sample, use_baseline)
 
         else:
             sampled_term = 0.
 
-        return sampled_term * sampled_weight + summed_term, full_loss
+        return (sampled_term * sampled_weight).sum() + summed_term, full_loss
 
-    def run_SGD(self, alpha, topk, init_var_params = None,
-                    lr = 1.0, n_steps = 10000, use_baseline = False):
-
-        if init_var_params is not None:
-            self.experiment_class.set_var_params(init_var_params)
-        else:
-            self.experiment_class.set_random_var_params()
+    def run_SGD(self, alpha, topk,
+                    lr = 1.0, n_steps = 10000, use_baseline = False,
+                    use_true_grad = False):
 
         _, init_loss = self.get_partial_marginal_loss(alpha, topk, use_baseline)
 
         # set up optimizer
         # params = [self.experiment_class.var_params]
         params = [{'params': self.experiment_class.var_params[key]} for key in self.experiment_class.var_params]
+
         optimizer = optim.SGD(params, lr = lr)
 
         loss_array = np.zeros(n_steps + 1)
@@ -161,7 +162,11 @@ class PartialMarginalizationREINFORCE(object):
             # ps_loss = self.get_partial_marginal_loss(alpha, topk)
             ps_loss, loss = self.get_partial_marginal_loss(alpha, topk, use_baseline)
 
-            ps_loss.backward()
+            if use_true_grad:
+                loss.backward()
+            else:
+                ps_loss.backward()
+
             optimizer.step()
 
             # save losses
