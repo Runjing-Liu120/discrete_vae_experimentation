@@ -91,7 +91,7 @@ class PartialMarginalizationREINFORCE(object):
         log_q = self.set_and_get_log_q()
 
         # this is the indicator C_\alpha
-        # print('class_weights', self.class_weights)
+        print('class_weights', self.class_weights)
         concentrated_mask = get_concentrated_mask(self.class_weights, alpha, topk)
         concentrated_mask = concentrated_mask.float().detach()
 
@@ -119,7 +119,8 @@ class PartialMarginalizationREINFORCE(object):
         sampled_weight = torch.sum(self.class_weights * (1 - concentrated_mask), dim = 1, keepdim = True)
         # print('concentrated_mask', concentrated_mask)
         # if torch.sum(1 - concentrated_mask) > 0:
-        if not(topk == self.class_weights.shape[1]): 
+
+        if not(topk == self.class_weights.shape[1]):
             conditional_class_weights = \
                 self.class_weights * (1 - concentrated_mask) / (sampled_weight)
 

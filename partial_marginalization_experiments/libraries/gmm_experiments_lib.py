@@ -13,6 +13,8 @@ import timeit
 
 from copy import deepcopy
 
+from sklearn.cluster import KMeans
+
 import itertools
 
 softmax = nn.Softmax(dim = 0)
@@ -99,6 +101,28 @@ class GMMExperiments(object):
 
         self.set_var_params(init_mu, init_log_sigma)
 
+    def set_kmeans_init_var_params(self, n_kmeans_init = 10):
+
+        for i in range(n_kmeans_init):
+            km = KMeans(n_clusters = self.n_clusters).fit(self.y)
+            enertia = km.inertia_
+            if (i == 0):
+                enertia_best = enertia
+                km_best = deepcopy(km)
+            elif (enertia < enertia_best):
+                enertia_best = enertia
+                km_best = deepcopy(km)
+
+        init_free_class_weights = torch.zeros((self.n_obs, self.n_clusters))
+        for n in range(len(km_best.labels_)):
+            init_free_class_weights[n, km_best.labels_[n]] = 2.0
+
+        init_free_class_weights.requires_grad_(True)
+        self.var_params['free_class_weights'] = init_free_class_weights
+        init_centroids = torch.Tensor(km_best.cluster_centers_)
+        init_centroids.requires_grad_(True)
+        self.var_params['centroids'] = init_centroids
+
     def set_true_params(self):
         # draw means from the prior
         # each row is a cluster mean
@@ -144,16 +168,14 @@ class GMMExperiments(object):
         # print('log_class_weights', self.log_class_weights)
 
         centroid_mask = self._get_centroid_mask(z)
-        centroids_masked = torch.matmul(centroid_mask, centroids)
+        centroids_masked = torch.matmul(centroid_mask.detach(), centroids)
 
         loglik_z = get_normal_loglik(self.y, centroids_masked, log_sigma).sum(dim = 1)
 
-        mu_prior_term = get_normal_loglik(centroids, self.mu0, torch.log(self.sigma0)).sum()
+        mu_prior_term = get_normal_loglik(centroids, self.mu0, torch.log(self.sigma0)).mean()
 
         z_prior_term = 0.0 # torch.log(self.prior_weights[z])
 
-        z_entropy_term = (- torch.exp(self.log_class_weights) * self.log_class_weights).sum()
-
-        # print(z_entropy_term)
+        z_entropy_term = (- torch.exp(self.log_class_weights) * self.log_class_weights).mean()
 
         return - (loglik_z + mu_prior_term + z_prior_term + z_entropy_term)
