@@ -117,6 +117,8 @@ class GMMExperiments(object):
         for n in range(len(km_best.labels_)):
             init_free_class_weights[n, km_best.labels_[n]] = 2.0
 
+        self.init_free_class_weights = deepcopy(init_free_class_weights)
+
         init_free_class_weights.requires_grad_(True)
         self.var_params['free_class_weights'] = init_free_class_weights
         init_centroids = torch.Tensor(km_best.cluster_centers_)
@@ -150,7 +152,9 @@ class GMMExperiments(object):
 
     def get_log_q(self):
         # self.log_class_weights = self.gmm_encoder.forward(self.y)
-        self.log_class_weights = log_softmax(self.var_params['free_class_weights']) #
+        fudge_lower_bdd = torch.Tensor([-8])
+        self.log_class_weights = log_softmax(torch.max(self.var_params['free_class_weights'], fudge_lower_bdd)) #
+
         return self.log_class_weights
 
     def _get_centroid_mask(self, z):
@@ -163,7 +167,7 @@ class GMMExperiments(object):
         centroids = self.var_params['centroids'] #
         log_sigma = torch.log(torch.Tensor([self.true_sigma]))  # self.var_params['log_sigma'] # #
 
-        # print('centroids', centroids.sum())
+        # print('centroids', centroids)
         # print('logsigma', log_sigma)
         # print('log_class_weights', self.log_class_weights)
 
@@ -177,5 +181,9 @@ class GMMExperiments(object):
         z_prior_term = 0.0 # torch.log(self.prior_weights[z])
 
         z_entropy_term = (- torch.exp(self.log_class_weights) * self.log_class_weights).mean()
+
+        # print('z_ent_term', z_entropy_term)
+        # print('mu_prior_term', mu_prior_term)
+        # print('loglik', loglik_z)
 
         return - (loglik_z + mu_prior_term + z_prior_term + z_entropy_term)

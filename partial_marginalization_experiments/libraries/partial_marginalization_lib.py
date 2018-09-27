@@ -52,6 +52,11 @@ class PartialMarginalizationREINFORCE(object):
 
         self.experiment_class = experiment_class
 
+        _ = self.set_and_get_log_q()
+
+        # cache this we will need it later
+        self.seq_tensor = torch.LongTensor([i for i in range(self.class_weights.shape[0])])
+
     # def set_var_params(self, var_params):
     #     self.experiment_class.var_params = var_params
 
@@ -82,7 +87,7 @@ class PartialMarginalizationREINFORCE(object):
         else:
             baseline = 0.0
 
-        return (f_z_i - baseline) * log_q_i
+        return (f_z_i.detach() - baseline) * log_q_i
 
     def get_partial_marginal_loss(self, alpha, topk,
                                     use_baseline = False,
@@ -91,14 +96,11 @@ class PartialMarginalizationREINFORCE(object):
         log_q = self.set_and_get_log_q()
 
         # this is the indicator C_\alpha
-        print('class_weights', self.class_weights)
         concentrated_mask = get_concentrated_mask(self.class_weights, alpha, topk)
         concentrated_mask = concentrated_mask.float().detach()
 
         # the summed term
-        summed_term = torch.Tensor([0.])
-        summed_term.requires_grad_(True)
-
+        summed_term = 0.0
         full_loss = 0.0
 
         for i in range(concentrated_mask.shape[1]):
@@ -106,11 +108,14 @@ class PartialMarginalizationREINFORCE(object):
             f_z_i = self.experiment_class.f_z(i)
             log_q_i = log_q[:, i]
             # print('f', f_z_i)
-            summed_term_ = \
-                (self.get_reinforce_grad_sample(f_z_i, log_q_i, use_baseline) * \
-                self.class_weights[:, i] * concentrated_mask[:, i]).sum()
+            reinforce_grad_sample = self.get_reinforce_grad_sample(f_z_i, log_q_i, use_baseline)
+            summed_term = summed_term + \
+                (reinforce_grad_sample * self.class_weights[:, i] * concentrated_mask[:, i]).sum() + \
+                (f_z_i * self.class_weights[:, i]).sum()
 
-            summed_term = summed_term + summed_term_
+            # print(self.class_weights[:, i])
+
+            # summed_term = summed_term + summed_term_
 
             if return_full_loss:
                 full_loss = full_loss + (torch.exp(log_q_i) * f_z_i).sum()
@@ -127,11 +132,11 @@ class PartialMarginalizationREINFORCE(object):
             conditional_z_sample = sample_class_weights(conditional_class_weights)
 
             # just for my own sanity ...
-            seq_tensor = torch.LongTensor([i for i in range(self.class_weights.shape[0])])
-            assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].numpy() == 1.)
+            assert np.all((1 - concentrated_mask)[self.seq_tensor, conditional_z_sample].numpy() == 1.)
 
             f_z_i_sample = self.experiment_class.f_z(conditional_z_sample)
-            log_q_i_sample = log_q[:, conditional_z_sample]
+            log_q_i_sample = log_q[self.seq_tensor, conditional_z_sample]
+
             sampled_term = self.get_reinforce_grad_sample(f_z_i_sample, log_q_i_sample, use_baseline)
 
         else:
