@@ -161,7 +161,7 @@ class GMMExperiments(object):
         mask = torch.zeros((self.n_obs, self.n_clusters))
         mask[self.seq_tensor, z] = 1
 
-        return mask
+        return mask.detach()
 
     def f_z(self, z):
         centroids = self.var_params['centroids'] #
@@ -172,7 +172,7 @@ class GMMExperiments(object):
         # print('log_class_weights', self.log_class_weights)
 
         centroid_mask = self._get_centroid_mask(z)
-        centroids_masked = torch.matmul(centroid_mask.detach(), centroids)
+        centroids_masked = torch.matmul(centroid_mask, centroids)
 
         loglik_z = get_normal_loglik(self.y, centroids_masked, log_sigma).sum(dim = 1)
 

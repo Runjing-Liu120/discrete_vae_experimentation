@@ -83,7 +83,7 @@ class PartialMarginalizationREINFORCE(object):
     def get_reinforce_grad_sample(self, f_z_i, log_q_i, use_baseline = False):
         if use_baseline:
             z_sample2 = sample_class_weights(self.class_weights)
-            baseline = self.experiment_class.f_z(z_sample2)
+            baseline = self.experiment_class.f_z(z_sample2).detach()
         else:
             baseline = 0.0
 
@@ -110,7 +110,7 @@ class PartialMarginalizationREINFORCE(object):
             # print('f', f_z_i)
             reinforce_grad_sample = self.get_reinforce_grad_sample(f_z_i, log_q_i, use_baseline)
             summed_term = summed_term + \
-                (reinforce_grad_sample * self.class_weights[:, i] * concentrated_mask[:, i]).sum() + \
+                ((reinforce_grad_sample) * self.class_weights[:, i] * concentrated_mask[:, i]).sum() + \
                 (f_z_i * self.class_weights[:, i]).sum()
 
             # print(self.class_weights[:, i])
@@ -142,7 +142,7 @@ class PartialMarginalizationREINFORCE(object):
         else:
             sampled_term = 0.
 
-        return (sampled_term * sampled_weight).sum() + summed_term, full_loss
+        return (sampled_term * sampled_weight.squeeze()).sum() + summed_term, full_loss
 
     def run_SGD(self, alpha, topk,
                     lr = 1.0, n_steps = 10000, use_baseline = False,
