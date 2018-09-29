@@ -42,13 +42,18 @@ class GMMEncoder(nn.Module):
 
         # feed through neural network
         h = F.relu(self.fc1(x))
-        h = F.relu(self.fc2(h))
-        log_class_weights = self.log_softmax(self.fc3(h))
+        # h = F.relu(self.fc2(h))
+
+        fudge_lower_bdd = torch.Tensor([-8])
+        h = torch.max(self.fc3(h), fudge_lower_bdd)
+        h = torch.min(h, - fudge_lower_bdd)
+
+        log_class_weights = self.log_softmax(h)
 
         return log_class_weights
 
 def get_normal_loglik(x, mu, log_sigma):
-    return - (x - mu)**2 / (2 * torch.exp(log_sigma) ** 2) - log_sigma * 0.5
+    return - (x - mu)**2 / (2 * torch.exp(log_sigma) ** 2) - log_sigma
 
 class GMMExperiments(object):
     def __init__(self, n_obs, mu0, sigma0, n_clusters, hidden_dim = 30):
@@ -69,10 +74,10 @@ class GMMExperiments(object):
         self.cat_rv = Categorical(probs = self.prior_weights)
 
         # the encoder
-        self.gmm_encoder = GMMEncoder(data_dim = self.dim,
-                             n_classes = self.n_clusters,
-                             hidden_dim = hidden_dim)
-
+        # self.gmm_encoder = GMMEncoder(data_dim = self.dim,
+        #                      n_classes = self.n_clusters,
+        #                      hidden_dim = hidden_dim)
+        #
         # self.var_params = {'encoder_params': self.gmm_encoder.parameters()}
 
 
@@ -92,12 +97,13 @@ class GMMExperiments(object):
         init_mu = torch.randn((self.n_clusters, self.dim)) * self.sigma0 + self.mu0
         init_mu.requires_grad_(True)
 
-        init_log_sigma = torch.log(torch.rand(1))
+        init_log_sigma = torch.log(torch.Tensor([self.true_sigma]))# torch.log(torch.rand(1))
         init_log_sigma.requires_grad_(True)
 
-        init_free_weights = torch.rand((self.n_obs, self.n_clusters))
-        init_free_weights = init_free_weights.requires_grad_(True)
-        self.var_params = {'free_class_weights': init_free_weights}
+        self.init_free_class_weights = torch.rand((self.n_obs, self.n_clusters))
+        init_free_class_weights = deepcopy(self.init_free_class_weights)
+        init_free_class_weights = init_free_class_weights.requires_grad_(True)
+        self.var_params = {'free_class_weights': init_free_class_weights}
 
         self.set_var_params(init_mu, init_log_sigma)
 
@@ -152,6 +158,7 @@ class GMMExperiments(object):
 
     def get_log_q(self):
         # self.log_class_weights = self.gmm_encoder.forward(self.y)
+
         fudge_lower_bdd = torch.Tensor([-8])
         self.log_class_weights = log_softmax(torch.max(self.var_params['free_class_weights'], fudge_lower_bdd)) #
 
@@ -165,7 +172,7 @@ class GMMExperiments(object):
 
     def f_z(self, z):
         centroids = self.var_params['centroids'] #
-        log_sigma = torch.log(torch.Tensor([self.true_sigma]))  # self.var_params['log_sigma'] # #
+        log_sigma = torch.log(torch.Tensor([self.true_sigma]))  #
 
         # print('centroids', centroids)
         # print('logsigma', log_sigma)

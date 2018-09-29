@@ -94,7 +94,6 @@ class PartialMarginalizationREINFORCE(object):
                                     return_full_loss = True):
         # class weights from the variational distribution
         log_q = self.set_and_get_log_q()
-
         # this is the indicator C_\alpha
         concentrated_mask = get_concentrated_mask(self.class_weights, alpha, topk)
         concentrated_mask = concentrated_mask.float().detach()
@@ -110,8 +109,7 @@ class PartialMarginalizationREINFORCE(object):
             # print('f', f_z_i)
             reinforce_grad_sample = self.get_reinforce_grad_sample(f_z_i, log_q_i, use_baseline)
             summed_term = summed_term + \
-                ((reinforce_grad_sample) * self.class_weights[:, i] * concentrated_mask[:, i]).sum() + \
-                (f_z_i * self.class_weights[:, i]).sum()
+                ((reinforce_grad_sample + f_z_i) * self.class_weights[:, i] * concentrated_mask[:, i]).sum()
 
             # print(self.class_weights[:, i])
 
@@ -137,7 +135,7 @@ class PartialMarginalizationREINFORCE(object):
             f_z_i_sample = self.experiment_class.f_z(conditional_z_sample)
             log_q_i_sample = log_q[self.seq_tensor, conditional_z_sample]
 
-            sampled_term = self.get_reinforce_grad_sample(f_z_i_sample, log_q_i_sample, use_baseline)
+            sampled_term = self.get_reinforce_grad_sample(f_z_i_sample, log_q_i_sample, use_baseline) + f_z_i_sample
 
         else:
             sampled_term = 0.
