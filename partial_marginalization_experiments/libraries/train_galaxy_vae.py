@@ -100,17 +100,17 @@ galaxy_vae = celeste_net.OneGalaxyVAE(args.slen)
 if args.attn_enc_warm_start:
     print('loading attention encoder from ' + args.attn_enc_init)
     state_dict = torch.load(args.attn_enc_init, map_location='cpu')
-    galaxy_vae.attn_enc.load_state_dict(state_dict, strict=False)
+    galaxy_vae.attn_enc.load_state_dict(state_dict, strict=True)
 
 if args.galaxy_enc_warm_start:
     print('loading galaxy encoder from ' + args.galaxy_enc_init)
     state_dict = torch.load(args.galaxy_enc_init, map_location='cpu')
-    galaxy_vae.enc.load_state_dict(state_dict, strict=False)
+    galaxy_vae.enc.load_state_dict(state_dict, strict=True)
 
 if args.galaxy_dec_warm_start:
     print('loading galaxy decoder from ' + args.galaxy_dec_init)
     state_dict = torch.load(args.galaxy_dec_init, map_location='cpu')
-    galaxy_vae.dec.load_state_dict(state_dict, strict=False)
+    galaxy_vae.dec.load_state_dict(state_dict, strict=True)
 
 
 
