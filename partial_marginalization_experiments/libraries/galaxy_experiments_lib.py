@@ -108,3 +108,75 @@ class CelesteRNN(nn.Module):
         map_cond_losses = f_z(map_locations).mean()
 
         return pm_loss, map_cond_losses
+
+
+def train_epoch(vae, loader,
+                alpha = 0.0,
+                topk = 0,
+                use_baseline = True,
+                train = False,
+                optimizer = None):
+    if train:
+        assert optimizer is not None
+        vae.train()
+    else:
+        vae.eval()
+
+    avg_loss = 0.0
+
+    for batch_idx, data in enumerate(loader):
+        image = data["image"]
+        background = data["background"]
+
+        if train:
+            optimizer.zero_grad()
+
+        pm_loss, loss = vae.get_pm_loss(image, background,
+                                           alpha = alpha,
+                                           topk = topk,
+                                           use_baseline = use_baseline)
+        if train:
+            pm_loss.backward()
+            optimizer.step()
+
+        avg_loss += loss
+
+    avg_loss /= len(loader.sampler)
+
+    return avg_loss
+
+def train_module(vae, train_loader, test_loader, epochs,
+                        alpha = 0.0, topk = 0, use_baseline = True,
+                        lr = 1e-4, weight_decay = 1e-6,
+                        save_every = 10,
+                        filename = './galaxy_vae_params',
+                        seed = 245345):
+
+    optimizer = optim.Adam(vae.parameters(), lr=lr, weight_decay=weight_decay)
+
+    for epoch in range(0, epochs):
+        np.random.seed(seed + epoch)
+        start_time = timeit.default_timer()
+        batch_loss = train_epoch(vae, train_loader,
+                                        alpha = alpha,
+                                        topk = topk,
+                                        use_baseline = use_baseline,
+                                        train = True,
+                                        optimizer = optimizer)
+
+        elapsed = timeit.default_timer() - start_time
+        print('[{}] loss: {:.0f}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
+
+        if epoch % save_every == 0:
+            # plot_reconstruction(vae, ds, epoch)
+            test_loss = train_epoch(vae, test_loader,
+                                            alpha = alpha,
+                                            topk = topk,
+                                            use_baseline = False,
+                                            train = False)
+
+            print('  * test loss: {:.0f}'.format(test_loss))
+
+            save_filename = filename + "_epoch{}.dat".format(epoch)
+            print("writing the network's parameters to " + save_filename)
+            torch.save(vae.state_dict(), save_filename)
