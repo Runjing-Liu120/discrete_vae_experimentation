@@ -68,13 +68,14 @@ galaxy_rnn = galaxy_lib.CelesteRNN(args.slen, one_galaxy_vae=galaxy_vae)
 galaxy_rnn.cuda()
 
 print("training the one-galaxy autoencoder...")
+filename = args.vae_outdir + args.vae_outfilename
 galaxy_lib.train_module(galaxy_rnn, train_loader, test_loader,
                         epochs = args.epochs,
                         save_every = args.save_every,
                         alpha = 0.0,
                         topk = args.topk,
                         use_baseline = True,
-                        lr = 1e-4,
+                        lr = 1e-2,
                         weight_decay = 1e-6,
-                        filename = './test',
+                        filename = filename,
                         seed = args.seed)
