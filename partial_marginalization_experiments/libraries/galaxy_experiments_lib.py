@@ -53,8 +53,8 @@ class CelesteRNN(nn.Module):
         # TODO: please check this ...
         self.n_discrete_latent = (sout - 2 * self.one_galaxy_vae.attn_enc.attn_offset)**2
 
-    def get_pixel_probs(self, image, image_var):
-        pixel_probs = self.one_galaxy_vae.attn_enc(image, image_var)
+    def get_pixel_probs(self, resid_image, resid_var):
+        pixel_probs = self.one_galaxy_vae.attn_enc(resid_image, resid_var)
 
         # just for myself to make sure I understand this right
         assert (pixel_probs.size(1) - 1) == self.n_discrete_latent
@@ -65,13 +65,13 @@ class CelesteRNN(nn.Module):
         pixel_dist = Categorical(pixel_probs)
         return pixel_dist.sample()
 
-    def get_loss_conditional_a(self, image, image_var, pixel_1d):
+    def get_loss_conditional_a(self, resid_image, resid_var, pixel_1d):
 
         is_on = (pixel_1d < (self.n_discrete_latent - 1)).float()
 
         # pass through galaxy encoder
         pixel_2d = self.one_galaxy_vae.pixel_1d_to_2d(pixel_1d)
-        z_mean, z_var = self.one_galaxy_vae.enc(image, pixel_2d)
+        z_mean, z_var = self.one_galaxy_vae.enc(resid_image, pixel_2d)
 
         # sample z
         q_z = Normal(z_mean, z_var.sqrt())
@@ -86,21 +86,23 @@ class CelesteRNN(nn.Module):
         # run through decoder
         recon_mean, recon_var = self.one_galaxy_vae.dec(pixel_2d, is_on, z_sample)
 
-        # get recon loss
-        recon_losses = -Normal(recon_mean, (recon_var + image_var).sqrt()).log_prob(image)
+        # get recon loss:
+        # NOTE: we will have to the recon means once we do more detections
+        recon_losses = -Normal(recon_mean + background,
+                                (recon_var + background).sqrt()).log_prob(image)
         recon_losses = recon_losses.view(image.size(0), -1).sum(1)
 
         conditional_loss = recon_losses + kl_z
 
         return conditional_loss, recon_mean, recon_var
 
-    def get_pm_loss(self, image, image_var, alpha, topk, use_baseline):
-        log_q = self.get_pixel_probs(image, image_var)
+    def get_pm_loss(self, image, background, image_var, alpha, topk, use_baseline):
+        log_q = self.get_pixel_probs(image, background, image_var)
 
         # kl term
         kl_a = (torch.exp(log_q) * log_q).sum()
 
-        f_z = lambda i : self.get_loss_conditional_a(image, image_var, i)[0] + kl_a
+        f_z = lambda i : self.get_loss_conditional_a(image, background, i)[0] + kl_a
 
         pm_loss = pm_lib.get_partial_marginal_loss(f_z, log_q, alpha, topk,
                                     use_baseline = use_baseline)
@@ -132,15 +134,17 @@ def train_epoch(vae, loader,
         if train:
             optimizer.zero_grad()
 
-        pm_loss, loss = vae.get_pm_loss(image, background,
-                                           alpha = alpha,
-                                           topk = topk,
-                                           use_baseline = use_baseline)
+        pm_loss, loss = vae.get_pm_loss(image = image,
+                                        background = background,
+                                        image_var = background, # since  we are only doing 1 detection atm
+                                        alpha = alpha,
+                                        topk = topk,
+                                        use_baseline = use_baseline)
         if train:
             pm_loss.backward()
             optimizer.step()
 
-        avg_loss += loss
+        avg_loss += loss * image.shape[0]
 
     avg_loss /= len(loader.sampler)
 
