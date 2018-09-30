@@ -37,6 +37,7 @@ parser.add_argument('--learning_rate', type = float, default = 0.001)
 
 parser.add_argument('--propn_labeled', type = float, default = 0.1,
                     help = 'proportion of training data labeled')
+
 parser.add_argument('--alpha', type = float, default = 1.0,
                     help = 'weight of cross_entropy_term')
 

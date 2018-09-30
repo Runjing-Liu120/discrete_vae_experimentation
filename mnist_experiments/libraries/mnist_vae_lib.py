@@ -770,7 +770,6 @@ def get_classification_accuracy(loader, classifier,
         z_ind = torch.argmax(class_weights, dim = 1)
 
         accuracy += torch.sum(z_ind == data['label']).float()
-        # print(accuracy)
 
         if return_wrong_images:
             wrong_indx = 1 - (z_ind == data['label'])
