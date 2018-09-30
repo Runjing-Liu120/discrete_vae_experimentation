@@ -23,7 +23,8 @@ from torch.utils.data import DataLoader, sampler
 
 import partial_marginalization_lib as pm_lib
 
-has_cuda = False
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+has_cuda = True
 
 def get_train_test_data(ds, batch_size):
 
@@ -125,8 +126,8 @@ def train_epoch(vae, loader,
     avg_loss = 0.0
 
     for batch_idx, data in enumerate(loader):
-        image = data["image"]
-        background = data["background"]
+        image = data["image"].to(device)
+        background = data["background"].to(device)
 
         if train:
             optimizer.zero_grad()

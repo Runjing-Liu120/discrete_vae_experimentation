@@ -15,6 +15,7 @@ from copy import deepcopy
 
 import itertools
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def sample_class_weights(class_weights):
     # draw a sample from Categorical variable with
@@ -33,7 +34,7 @@ def get_concentrated_mask(class_weights, alpha, topk):
     mask_alpha = (class_weights >= alpha).float().detach()
 
     # but if there are more than k, only take the topk
-    mask_topk = torch.zeros(class_weights.shape)
+    mask_topk = torch.zeros(class_weights.shape).to(device)
 
     seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])])
 
@@ -103,7 +104,7 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
         conditional_z_sample = sample_class_weights(conditional_class_weights)
 
         # just for my own sanity ...
-        assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].numpy() == 1.)
+        assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].cpu().numpy() == 1.)
 
         f_z_i_sample = f_z(conditional_z_sample)
         log_q_i_sample = log_q[seq_tensor, conditional_z_sample]

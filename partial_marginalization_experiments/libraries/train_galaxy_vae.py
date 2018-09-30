@@ -13,16 +13,18 @@ import torch.optim as optim
 
 import sys
 sys.path.insert(0, '../../../celeste_net/')
+import celeste_net
 
 from datasets import Synthetic
 
 import galaxy_experiments_lib as galaxy_lib
 
+import os
 
 parser = argparse.ArgumentParser(description='CelesteNet')
 
 # training options
-parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+parser.add_argument('--batchsize', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
 parser.add_argument('--topk', type = int, default = 5,
                     help='how many to integrate out')
@@ -59,12 +61,14 @@ validate_args()
 
 # get dataset
 ds = Synthetic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=12800)
-train_loader, test_loader = galaxy_lib.get_train_test_data(ds, batch_size=args.batch_size)
+train_loader, test_loader = galaxy_lib.get_train_test_data(ds, batch_size=args.batchsize)
 
-vae = galaxy_lib.CelesteRNN(args.slen, max_detections=4)
+galaxy_vae = celeste_net.OneGalaxyVAE(args.slen)
+galaxy_rnn = galaxy_lib.CelesteRNN(args.slen, one_galaxy_vae=galaxy_vae)
+galaxy_rnn.cuda()
 
 print("training the one-galaxy autoencoder...")
-galaxy_lib.train_module(vae, train_loader, test_loader,
+galaxy_lib.train_module(galaxy_rnn, train_loader, test_loader,
                         epochs = args.epochs,
                         save_every = args.save_every,
                         alpha = 0.0,
