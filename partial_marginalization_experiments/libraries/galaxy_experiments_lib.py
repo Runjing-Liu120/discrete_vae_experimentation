@@ -67,7 +67,7 @@ class CelesteRNN(nn.Module):
 
     def get_loss_conditional_a(self, resid_image, image_so_far, var_so_far, pixel_1d):
         image = image_so_far + resid_image
-        
+
         is_on = (pixel_1d < (self.n_discrete_latent - 1)).float()
 
         # pass through galaxy encoder
@@ -162,7 +162,11 @@ def train_module(vae, train_loader, test_loader, epochs,
                         filename = './galaxy_vae_params',
                         seed = 245345):
 
-    optimizer = optim.Adam(vae.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = optim.Adam(
+    {'params': vae.one_galaxy_vae.enc.parameters()},
+    {'params': vae.one_galaxy_vae.dec.parameters()},
+    {'params': vae.one_galaxy_vae.attn_enc.parameters(), 'lr': 1e-5},
+    lr=lr, weight_decay=weight_decay)
 
     for epoch in range(0, epochs):
         np.random.seed(seed + epoch)
