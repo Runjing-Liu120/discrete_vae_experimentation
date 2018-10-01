@@ -104,7 +104,7 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
         conditional_z_sample = sample_class_weights(conditional_class_weights)
 
         # just for my own sanity ...
-        assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].cpu().numpy() == 1.), 'sampled_weight{ }'.format(sampled_weight)
+        assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].cpu().numpy() == 1.), 'sampled_weight {}'.format(sampled_weight)
 
         f_z_i_sample = f_z(conditional_z_sample)
         log_q_i_sample = log_q[seq_tensor, conditional_z_sample]
