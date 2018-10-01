@@ -8,4 +8,4 @@ python ../libraries/train_galaxy_vae.py \
 			--vae_outdir '../galaxy_results/' \
 			--galaxy_enc_warm_start False \
 			--galaxy_dec_warm_start False \
-			--vae_outfilename 'galaxy_vae_experimenting_lr' 
+			--vae_outfilename 'galaxy_vae_master_celestenet' 
