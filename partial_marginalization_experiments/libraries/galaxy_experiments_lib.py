@@ -85,7 +85,7 @@ class CelesteRNN(nn.Module):
         kl_z = is_on * (log_q_z - log_p_z)
 
         # run through decoder
-        recon_mean, recon_var = self.one_galaxy_vae.dec(pixel_2d, is_on, z_sample)
+        recon_mean, recon_var = self.one_galaxy_vae.dec(is_on, pixel_2d, z_sample)
 
         # get recon loss:
         # NOTE: we will have to the recon means once we do more detections
@@ -163,10 +163,10 @@ def train_module(vae, train_loader, test_loader, epochs,
                         seed = 245345):
 
     optimizer = optim.Adam(
-    {'params': vae.one_galaxy_vae.enc.parameters()},
-    {'params': vae.one_galaxy_vae.dec.parameters()},
-    {'params': vae.one_galaxy_vae.attn_enc.parameters(), 'lr': 1e-5},
-    lr=lr, weight_decay=weight_decay)
+                        {'params': vae.one_galaxy_vae.enc.parameters()},
+                        {'params': vae.one_galaxy_vae.dec.parameters()},
+                        {'params': vae.one_galaxy_vae.attn_enc.parameters(), 'lr': 1e-5},
+                        lr=lr, weight_decay=weight_decay)
 
     for epoch in range(0, epochs):
         np.random.seed(seed + epoch)
