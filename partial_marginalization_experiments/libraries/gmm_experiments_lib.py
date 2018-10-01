@@ -17,6 +17,8 @@ from sklearn.cluster import KMeans
 
 import itertools
 
+import partial_marginalization_lib as pm_lib
+
 softmax = nn.Softmax(dim = 0)
 log_softmax = nn.LogSoftmax(dim = 1)
 
@@ -129,7 +131,7 @@ class GMMExperiments(object):
         self.var_params['free_class_weights'] = init_free_class_weights
         init_centroids = torch.Tensor(km_best.cluster_centers_)
         init_centroids.requires_grad_(True)
-        # self.var_params['centroids'] = init_centroids
+        self.var_params['centroids'] = init_centroids
 
     def set_true_params(self):
         # draw means from the prior
@@ -194,3 +196,15 @@ class GMMExperiments(object):
         # print('loglik', loglik_z)
 
         return - (loglik_z + mu_prior_term + z_prior_term + z_entropy_term)
+
+    def get_pm_loss(self, alpha, topk, use_baseline):
+        log_q = self.get_log_q()
+        pm_loss = pm_lib.get_partial_marginal_loss(self.f_z, log_q, alpha, topk,
+                                    use_baseline = use_baseline)
+
+        return pm_loss
+
+    def get_full_loss(self):
+        log_q = self.get_log_q()
+        class_weights = torch.exp(log_q)
+        return pm_lib.get_full_loss(self.f_z, class_weights)

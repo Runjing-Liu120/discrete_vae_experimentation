@@ -9,6 +9,8 @@ import torch.optim as optim
 from torch.distributions import Normal, Categorical, Bernoulli
 import torch.nn.functional as F
 
+import partial_marginalization_lib as pm_lib
+
 import timeit
 
 from copy import deepcopy
@@ -32,7 +34,7 @@ class BernoulliExperiments(object):
 
         self.var_params = {'phi': deepcopy(phi0)}
 
-    def set_var_params(self, phi): 
+    def set_var_params(self, phi):
         self.var_params = {'phi': deepcopy(phi)}
 
     def set_draw_array(self):
@@ -68,6 +70,18 @@ class BernoulliExperiments(object):
         # returns the log probabilitie for draw i
         e_b = sigmoid(self.var_params['phi'])
         return get_bernoulli_log_prob(e_b, self.draw_array[i])
+
+    def get_pm_loss(self, alpha, topk, use_baseline):
+        log_q = self.get_log_q()
+        pm_loss = pm_lib.get_partial_marginal_loss(self.f_z, log_q, alpha, topk,
+                                    use_baseline = use_baseline)
+
+        return pm_loss
+
+    def get_full_loss(self):
+        log_q = self.get_log_q()
+        class_weights = torch.exp(log_q)
+        return pm_lib.get_full_loss(self.f_z, class_weights)
 
     # def get_sampled_reinforce_ps_loss(self, phi, i):
     #     # after drawing i, compute the reinforce pseudoloss
