@@ -145,6 +145,7 @@ def train_epoch(vae, loader,
                                         alpha = alpha,
                                         topk = topk,
                                         use_baseline = use_baseline)
+        # print(loss)
         if train:
             pm_loss.backward()
             optimizer.step()
@@ -186,7 +187,7 @@ def train_module(vae, train_loader, test_loader, epochs,
             test_loss = train_epoch(vae, test_loader,
                                             alpha = alpha,
                                             topk = topk,
-                                            use_baseline = False,
+                                            use_baseline = use_baseline,
                                             train = False)
 
             print('  * test loss: {:.0f}'.format(test_loss))
