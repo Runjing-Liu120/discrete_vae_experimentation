@@ -11,6 +11,8 @@ import torch
 from torch.utils.data import DataLoader, sampler
 import torch.optim as optim
 
+import distutils.util
+
 import sys
 sys.path.insert(0, '../../../celeste_net/')
 import celeste_net
@@ -47,19 +49,19 @@ parser.add_argument('--save_every', type = int, default = 50,
 # if warm start_time
 parser.add_argument('--galaxy_enc_warm_start', type = distutils.util.strtobool,
                     default = False, help = 'whether to initialize the galaxy encoder')
-parser.add_argument('--galaxy_enc_init', type = str,
+parser.add_argument('--galaxy_enc_init_file', type = str,
                     default = '../galaxy_warm_starts/galaxy_enc_init.dat',
                     help = 'file from which to load galaxy encoder')
 
 parser.add_argument('--galaxy_dec_warm_start', type = distutils.util.strtobool,
                     default = False, help = 'whether to initialize the galaxy decoder')
-parser.add_argument('--galaxy_dec_init', type = str,
+parser.add_argument('--galaxy_dec_init_file', type = str,
                     default = '../galaxy_warm_starts/galaxy_dec_init.dat',
                     help = 'file from which to load galaxy decoder')
 
 parser.add_argument('--attn_enc_warm_start', type = distutils.util.strtobool,
                     default = False, help = 'whether to initialize the attention encoder')
-parser.add_argument('--attn_enc_init', type = str,
+parser.add_argument('--attn_enc_init_file', type = str,
                     default = '../galaxy_warm_starts/attn_enc_init.dat',
                     help = 'file from which to load galaxy encoder')
 
@@ -78,13 +80,13 @@ def validate_args():
     assert os.path.exists(args.vae_outdir)
 
     if args.attn_enc_warm_start:
-        assert os.path.isfile(args.attn_enc_init)
+        assert os.path.isfile(args.attn_enc_init_file)
 
     if args.galaxy_enc_warm_start:
-        assert os.path.isfile(args.galaxy_enc_init)
+        assert os.path.isfile(args.galaxy_enc_init_file)
 
     if args.galaxy_dec_warm_start:
-        assert os.path.isfile(args.galaxy_dec_init)
+        assert os.path.isfile(args.galaxy_dec_init_file)
 
 
 validate_args()
@@ -98,18 +100,18 @@ galaxy_vae = celeste_net.OneGalaxyVAE(args.slen)
 
 # if warm start
 if args.attn_enc_warm_start:
-    print('loading attention encoder from ' + args.attn_enc_init)
-    state_dict = torch.load(args.attn_enc_init, map_location='cpu')
+    print('loading attention encoder from ' + args.attn_enc_init_file)
+    state_dict = torch.load(args.attn_enc_init_file, map_location='cpu')
     galaxy_vae.attn_enc.load_state_dict(state_dict, strict=True)
 
 if args.galaxy_enc_warm_start:
-    print('loading galaxy encoder from ' + args.galaxy_enc_init)
-    state_dict = torch.load(args.galaxy_enc_init, map_location='cpu')
+    print('loading galaxy encoder from ' + args.galaxy_enc_init_file)
+    state_dict = torch.load(args.galaxy_enc_init_file, map_location='cpu')
     galaxy_vae.enc.load_state_dict(state_dict, strict=True)
 
 if args.galaxy_dec_warm_start:
-    print('loading galaxy decoder from ' + args.galaxy_dec_init)
-    state_dict = torch.load(args.galaxy_dec_init, map_location='cpu')
+    print('loading galaxy decoder from ' + args.galaxy_dec_init_file)
+    state_dict = torch.load(args.galaxy_dec_init_file, map_location='cpu')
     galaxy_vae.dec.load_state_dict(state_dict, strict=True)
 
 
