@@ -163,10 +163,10 @@ def train_module(vae, train_loader, test_loader, epochs,
                         seed = 245345):
 
     optimizer = optim.Adam(
-                        {'params': vae.one_galaxy_vae.enc.parameters()},
-                        {'params': vae.one_galaxy_vae.dec.parameters()},
-                        {'params': vae.one_galaxy_vae.attn_enc.parameters(), 'lr': 1e-5},
-                        lr=lr, weight_decay=weight_decay)
+    [{'params': vae.one_galaxy_vae.enc.parameters()},
+    {'params': vae.one_galaxy_vae.dec.parameters()},
+    {'params': vae.one_galaxy_vae.attn_enc.parameters(), 'lr': 1e-5}],
+    lr=lr, weight_decay=weight_decay)
 
     for epoch in range(0, epochs):
         np.random.seed(seed + epoch)
