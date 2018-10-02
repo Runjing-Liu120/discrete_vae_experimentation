@@ -146,7 +146,7 @@ galaxy_lib.train_module(galaxy_rnn, train_loader, test_loader,
                         topk = args.topk,
                         n_samples = args.n_samples,
                         use_baseline = True,
-                        lr = 1e-4,
+                        lr = 1e-5,
                         weight_decay = 1e-6,
                         filename = filename,
                         seed = args.seed)
