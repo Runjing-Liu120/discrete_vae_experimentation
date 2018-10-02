@@ -227,6 +227,7 @@ def train_module(vae, train_loader, test_loader, epochs,
     {'params': vae.one_galaxy_vae.attn_enc.parameters(), 'lr': 1e-5}],
     lr=lr, weight_decay=weight_decay)
 
+    test_loss_array = []
     for epoch in range(0, epochs):
         np.random.seed(seed + epoch)
         start_time = timeit.default_timer()
@@ -253,3 +254,7 @@ def train_module(vae, train_loader, test_loader, epochs,
             save_filename = filename + "_epoch{}.dat".format(epoch)
             print("writing the network's parameters to " + save_filename)
             torch.save(vae.state_dict(), save_filename)
+
+            test_loss_array.append(test_loss.detach())
+
+    np.save(filename + '_losses_array', test_loss_array)
