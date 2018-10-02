@@ -67,6 +67,10 @@ parser.add_argument('--attn_enc_init_file', type = str,
                     default = '../galaxy_warm_starts/attn_enc_init.dat',
                     help = 'file from which to load galaxy encoder')
 
+parser.add_argument('--vae_warm_start', type = distutils.util.strtobool,
+                    default = True, help = 'whether to initialize the entire')
+parser.add_argument('--vae_init_file', type = str,
+                    help = 'file from which to load entire vae')
 
 # seed
 parser.add_argument('--seed', type=int, default=64, metavar='S',
@@ -119,6 +123,11 @@ if args.galaxy_dec_warm_start:
     print('loading galaxy decoder from ' + args.galaxy_dec_init_file)
     state_dict = torch.load(args.galaxy_dec_init_file, map_location='cpu')
     galaxy_vae.dec.load_state_dict(state_dict, strict=True)
+
+if args.vae_warm_start:
+    print('loading galaxy decoder from ' + args.vae_init_file)
+    state_dict = torch.load(args.vae_init_file, map_location='cpu')
+    galaxy_vae.load_state_dict(state_dict, strict=True)
 
 
 
