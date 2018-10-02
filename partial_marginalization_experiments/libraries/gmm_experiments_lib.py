@@ -129,9 +129,9 @@ class GMMExperiments(object):
 
         init_free_class_weights.requires_grad_(True)
         self.var_params['free_class_weights'] = init_free_class_weights
-        init_centroids = torch.Tensor(km_best.cluster_centers_)
-        init_centroids.requires_grad_(True)
-        self.var_params['centroids'] = init_centroids
+        # init_centroids = torch.Tensor(km_best.cluster_centers_)
+        # init_centroids.requires_grad_(True)
+        # self.var_params['centroids'] = init_centroids
 
     def set_true_params(self):
         # draw means from the prior
