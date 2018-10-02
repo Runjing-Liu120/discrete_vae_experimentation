@@ -124,14 +124,12 @@ if args.galaxy_dec_warm_start:
     state_dict = torch.load(args.galaxy_dec_init_file, map_location='cpu')
     galaxy_vae.dec.load_state_dict(state_dict, strict=True)
 
-if args.vae_warm_start:
-    print('loading galaxy decoder from ' + args.vae_init_file)
-    state_dict = torch.load(args.vae_init_file, map_location='cpu')
-    galaxy_vae.load_state_dict(state_dict, strict=True)
-
-
-
 galaxy_rnn = galaxy_lib.CelesteRNN(args.slen, one_galaxy_vae=galaxy_vae)
+if args.vae_warm_start:
+    print('loading galaxy vae from ' + args.vae_init_file)
+    state_dict = torch.load(args.vae_init_file, map_location='cpu')
+    galaxy_rnn.load_state_dict(state_dict, strict=True)
+
 galaxy_rnn.cuda()
 
 print("training the one-galaxy autoencoder...")
