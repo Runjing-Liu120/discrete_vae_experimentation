@@ -66,7 +66,7 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
                                 use_baseline = False):
 
     # class weights from the variational distribution
-    assert np.all(log_q.detach().numpy() < 0)
+    assert np.all(log_q.detach().cpu().numpy() < 0)
     class_weights = torch.exp(log_q.detach())
 
     # this is the indicator C_\alpha
