@@ -99,7 +99,11 @@ class CelesteRNN(nn.Module):
 
         return conditional_loss, recon_means, recon_vars
 
-    def get_pm_loss(self, image, image_so_far, var_so_far, alpha, topk, use_baseline):
+    def get_pm_loss(self, image, image_so_far, var_so_far,
+                            alpha = 0.0,
+                            topk = 0,
+                            use_baseline = True,
+                            n_samples = 1):
 
         resid_image = image - image_so_far
         log_q = self.get_pixel_probs(resid_image, var_so_far)
@@ -109,76 +113,81 @@ class CelesteRNN(nn.Module):
 
         f_z = lambda i : self.get_loss_conditional_a(resid_image, image_so_far, var_so_far, i)[0] + kl_a
 
-        pm_loss = pm_lib.get_partial_marginal_loss(f_z, log_q, alpha, topk,
-                                    use_baseline = use_baseline)
+        avg_pm_loss = 0.0
+        # TODO: n_samples would be more elegant as an
+        # argument to get_partial_marginal_loss
+        for k in range(n_samples):
+            pm_loss = pm_lib.get_partial_marginal_loss(f_z, log_q, alpha, topk,
+                                        use_baseline = use_baseline)
+            avg_pm_loss += pm_loss / n_samples
 
         map_locations = torch.argmax(log_q.detach(), dim = 1)
         map_cond_losses = f_z(map_locations).mean()
 
-        return pm_loss, map_cond_losses
+        return avg_pm_loss, map_cond_losses
 
-    def get_pm_loss_multiple_detections(self, image, background,
-                                                max_detections = 1,
-                                                alpha = 0.0,
-                                                topk = 0,
-                                                use_baseline = False):
-
-        recon_means = background.data.clone()
-        recon_vars = background.data.clone()
-
-        for t in range(max_detections):
-            res_image = image - recon_means
-
-            log_q = self.get_pixel_probs(resid_image, recon_vars)
-            class_weights = torch.exp(log_q.detac())
-
-            concentrated_mask, topk_domain, seq_tensor = \
-                get_concentrated_mask(class_weights, alpha, topk)
-
-
-            # is there an easier way to do this?
-            image_shape_as_list = [images_batch1.shape[i] for i in range(4)]
-            recon_means_topk = torch.zeros([topk] + image_shape_as_list)
-
-            for i in range(topk):
-                summed_indx = topk_domain[:, i]
-                f_z_i = f_z(summed_indx)
-                log_q_i = log_q[seq_tensor, summed_indx]
-
-                _, recon_mean_topk, recon_vars_topk = \
-                        self.get_loss_conditional_a(resid_image,
-                                                    image_so_far =  recon_means,
-                                                    var_so_far = recon_vars,
-                                                    pixel_1d = summed_indx)
-
-                recon_means_topk[i] = recon_means_topk[i] + recon_mean_topk
-                recon_vars_topk[i] = recon_means_topk[i] + recon_vars_topk
-
-            if not(topk == class_weights.shape[1]):
-                conditional_class_weights = \
-                    class_weights * (1 - concentrated_mask) / (sampled_weight)
-
-                conditional_a_sample = self.sample_pixel(conditional_class_weights)
-
-                # just for my own sanity ...
-                assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].cpu().numpy() == 1.), 'sampled_weight {}'.format(sampled_weight)
-
-                f_z_i_sample = f_z(conditional_z_sample)
-                log_q_i_sample = log_q[seq_tensor, conditional_z_sample]
-
-                _, recon_mean_sampled, recon_vars_sampled = \
-                        self.get_loss_conditional_a(resid_image,
-                                                    image_so_far =  recon_means,
-                                                    var_so_far = recon_vars,
-                                                    pixel_1d = conditional_z_sample)
-
-
-
+    # def get_pm_loss_multiple_detections(self, image, background,
+    #                                             max_detections = 1,
+    #                                             alpha = 0.0,
+    #                                             topk = 0,
+    #                                             use_baseline = False):
+    #
+    #     recon_means = background.data.clone()
+    #     recon_vars = background.data.clone()
+    #
+    #     for t in range(max_detections):
+    #         res_image = image - recon_means
+    #
+    #         log_q = self.get_pixel_probs(resid_image, recon_vars)
+    #         class_weights = torch.exp(log_q.detac())
+    #
+    #         concentrated_mask, topk_domain, seq_tensor = \
+    #             get_concentrated_mask(class_weights, alpha, topk)
+    #
+    #
+    #         # is there an easier way to do this?
+    #         image_shape_as_list = [images_batch1.shape[i] for i in range(4)]
+    #         recon_means_topk = torch.zeros([topk] + image_shape_as_list)
+    #
+    #         for i in range(topk):
+    #             summed_indx = topk_domain[:, i]
+    #             f_z_i = f_z(summed_indx)
+    #             log_q_i = log_q[seq_tensor, summed_indx]
+    #
+    #             _, recon_mean_topk, recon_vars_topk = \
+    #                     self.get_loss_conditional_a(resid_image,
+    #                                                 image_so_far =  recon_means,
+    #                                                 var_so_far = recon_vars,
+    #                                                 pixel_1d = summed_indx)
+    #
+    #             recon_means_topk[i] = recon_means_topk[i] + recon_mean_topk
+    #             recon_vars_topk[i] = recon_means_topk[i] + recon_vars_topk
+    #
+    #         if not(topk == class_weights.shape[1]):
+    #             conditional_class_weights = \
+    #                 class_weights * (1 - concentrated_mask) / (sampled_weight)
+    #
+    #             conditional_a_sample = self.sample_pixel(conditional_class_weights)
+    #
+    #             # just for my own sanity ...
+    #             assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].cpu().numpy() == 1.), 'sampled_weight {}'.format(sampled_weight)
+    #
+    #             f_z_i_sample = f_z(conditional_z_sample)
+    #             log_q_i_sample = log_q[seq_tensor, conditional_z_sample]
+    #
+    #             _, recon_mean_sampled, recon_vars_sampled = \
+    #                     self.get_loss_conditional_a(resid_image,
+    #                                                 image_so_far =  recon_means,
+    #                                                 var_so_far = recon_vars,
+    #                                                 pixel_1d = conditional_z_sample)
+    #
+    #
 
 
 def train_epoch(vae, loader,
                 alpha = 0.0,
                 topk = 0,
+                n_samples = 1,
                 use_baseline = True,
                 train = False,
                 optimizer = None):
@@ -202,7 +211,8 @@ def train_epoch(vae, loader,
                                         var_so_far = background, # since  we are only doing 1 detection atm
                                         alpha = alpha,
                                         topk = topk,
-                                        use_baseline = use_baseline)
+                                        use_baseline = use_baseline,
+                                        n_samples = n_samples)
 
         if train:
             pm_loss.backward()
@@ -215,7 +225,7 @@ def train_epoch(vae, loader,
     return avg_loss
 
 def train_module(vae, train_loader, test_loader, epochs,
-                        alpha = 0.0, topk = 0, use_baseline = True,
+                        alpha = 0.0, topk = 0, use_baseline = True, n_samples = 1,
                         lr = 1e-4, weight_decay = 1e-6,
                         save_every = 10,
                         filename = './galaxy_vae_params',
@@ -235,6 +245,7 @@ def train_module(vae, train_loader, test_loader, epochs,
                                         alpha = alpha,
                                         topk = topk,
                                         use_baseline = use_baseline,
+                                        n_samples = n_samples,
                                         train = True,
                                         optimizer = optimizer)
 
@@ -244,9 +255,10 @@ def train_module(vae, train_loader, test_loader, epochs,
         if epoch % save_every == 0:
             # plot_reconstruction(vae, ds, epoch)
             test_loss = train_epoch(vae, test_loader,
-                                            alpha = alpha,
-                                            topk = topk,
-                                            use_baseline = use_baseline,
+                                            alpha = 0,
+                                            topk = 0,
+                                            use_baseline = False,
+                                            n_samples = 1,
                                             train = False)
 
             print('  * test loss: {:.0f}'.format(test_loss))
@@ -257,4 +269,4 @@ def train_module(vae, train_loader, test_loader, epochs,
 
             test_loss_array.append(test_loss.detach())
 
-    np.save(filename + '_losses_array', test_loss_array)
+            np.save(filename + '_losses_array', test_loss_array)

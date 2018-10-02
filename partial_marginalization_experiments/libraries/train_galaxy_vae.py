@@ -30,6 +30,8 @@ parser.add_argument('--batchsize', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
 parser.add_argument('--topk', type = int, default = 5,
                     help='how many to integrate out')
+parser.add_argument('--n_samples', type = int, default = 1,
+                    help='how many samples for REINFORCE')
 parser.add_argument('--epochs', type=int, default=1000, metavar='N',
                     help='number of epochs to train (default: 1000)')
 
@@ -88,6 +90,10 @@ def validate_args():
     if args.galaxy_dec_warm_start:
         assert os.path.isfile(args.galaxy_dec_init_file)
 
+    if n_samples > 1:
+        if args.topk > 0:
+            print('are you sure you want multiple samples with topk = {}'.format(args.topk))
+
 
 validate_args()
 
@@ -120,12 +126,16 @@ galaxy_rnn = galaxy_lib.CelesteRNN(args.slen, one_galaxy_vae=galaxy_vae)
 galaxy_rnn.cuda()
 
 print("training the one-galaxy autoencoder...")
+print('topk = {}'.format(args.topk))
+print('n_samples = {}'.format(args.n_samples))
+
 filename = args.vae_outdir + args.vae_outfilename
 galaxy_lib.train_module(galaxy_rnn, train_loader, test_loader,
                         epochs = args.epochs,
                         save_every = args.save_every,
                         alpha = 0.0,
                         topk = args.topk,
+                        n_samples = args.n_samples,
                         use_baseline = True,
                         lr = 1e-4,
                         weight_decay = 1e-6,
