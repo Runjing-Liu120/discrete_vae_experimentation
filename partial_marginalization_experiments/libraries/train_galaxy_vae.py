@@ -90,7 +90,7 @@ def validate_args():
     if args.galaxy_dec_warm_start:
         assert os.path.isfile(args.galaxy_dec_init_file)
 
-    if n_samples > 1:
+    if args.n_samples > 1:
         if args.topk > 0:
             print('are you sure you want multiple samples with topk = {}'.format(args.topk))
 
