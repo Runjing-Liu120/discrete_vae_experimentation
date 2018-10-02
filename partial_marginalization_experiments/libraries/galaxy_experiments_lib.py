@@ -235,7 +235,7 @@ def train_module(vae, train_loader, test_loader, epochs,
     optimizer = optim.Adam(
     [{'params': vae.one_galaxy_vae.enc.parameters()},
     {'params': vae.one_galaxy_vae.dec.parameters()},
-    {'params': vae.one_galaxy_vae.attn_enc.parameters(), 'lr': 1e-5}],
+    {'params': vae.one_galaxy_vae.attn_enc.parameters(), 'lr': 1e-6}],
     lr=lr, weight_decay=weight_decay)
 
     test_loss_array = []
