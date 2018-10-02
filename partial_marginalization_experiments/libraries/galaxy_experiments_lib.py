@@ -106,10 +106,11 @@ class CelesteRNN(nn.Module):
                             n_samples = 1):
 
         resid_image = image - image_so_far
-        log_q = self.get_pixel_probs(resid_image, var_so_far)
+        class_weights = self.get_pixel_probs(resid_image, var_so_far)
+        log_q = torch.log(class_weights)
 
         # kl term
-        kl_a = (torch.exp(log_q) * log_q).sum()
+        kl_a = (class_weights * log_q).sum()
 
         f_z = lambda i : self.get_loss_conditional_a(resid_image, image_so_far, var_so_far, i)[0] + kl_a
 
