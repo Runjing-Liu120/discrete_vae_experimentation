@@ -2,8 +2,8 @@
 
 python ../libraries/train_galaxy_vae.py \
 			--slen 20 \
-			--epochs 201 \
-			--save_every 10 \
+			--epochs 2001 \
+			--save_every 100 \
 			--batchsize 64 \
 			--seed 904 \
 			--topk 3 \
