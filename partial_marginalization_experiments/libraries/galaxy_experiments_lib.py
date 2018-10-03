@@ -240,7 +240,20 @@ def train_module(vae, train_loader, test_loader, epochs,
 
     test_losses_array = []
     batch_losses_array = np.zeros(epochs)
-    for epoch in range(0, epochs):
+
+    batch_loss = train_epoch(vae, train_loader,
+                                    alpha = alpha,
+                                    topk = topk,
+                                    use_baseline = use_baseline,
+                                    n_samples = n_samples,
+                                    train = False)
+                                    
+    print('init_loss: ', batch_loss)
+
+    batch_losses_array[0] = batch_loss
+
+
+    for epoch in range(1, epochs):
         np.random.seed(seed + epoch)
         start_time = timeit.default_timer()
         batch_loss = train_epoch(vae, train_loader,
