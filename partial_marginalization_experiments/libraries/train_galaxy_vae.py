@@ -102,7 +102,7 @@ def validate_args():
 validate_args()
 
 # get dataset
-ds = Synthetic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=12800, brightness = 2000)
+ds = Synthetic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=12800, brightness = 30000)
 train_loader, test_loader = galaxy_lib.get_train_test_data(ds, batch_size=args.batchsize)
 
 # set up vae

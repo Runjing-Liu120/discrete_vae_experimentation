@@ -64,8 +64,9 @@ class CelesteRNN(nn.Module):
             mask = torch.ones(pixel_probs.shape)
             if always_on:
                 mask[:, -1] = 1.e-16
+            pixel_probs = pixel_probs * mask.to(device)
 
-        return pixel_probs * mask.to(device)
+        return pixel_probs
 
     def sample_pixel(self, pixel_probs, always_on = True):
         mask = torch.ones(pixel_probs.shape)
