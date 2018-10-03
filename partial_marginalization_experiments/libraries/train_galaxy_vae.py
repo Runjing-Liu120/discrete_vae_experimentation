@@ -30,6 +30,8 @@ parser.add_argument('--batchsize', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
 parser.add_argument('--topk', type = int, default = 5,
                     help='how many to integrate out')
+parser.add_argument('--n_samples', type = int, default = 1,
+                    help='how many samples for REINFORCE')
 parser.add_argument('--epochs', type=int, default=1000, metavar='N',
                     help='number of epochs to train (default: 1000)')
 
@@ -65,6 +67,10 @@ parser.add_argument('--attn_enc_init_file', type = str,
                     default = '../galaxy_warm_starts/attn_enc_init.dat',
                     help = 'file from which to load galaxy encoder')
 
+parser.add_argument('--vae_warm_start', type = distutils.util.strtobool,
+                    default = True, help = 'whether to initialize the entire')
+parser.add_argument('--vae_init_file', type = str,
+                    help = 'file from which to load entire vae')
 
 # seed
 parser.add_argument('--seed', type=int, default=64, metavar='S',
@@ -88,11 +94,15 @@ def validate_args():
     if args.galaxy_dec_warm_start:
         assert os.path.isfile(args.galaxy_dec_init_file)
 
+    if args.n_samples > 1:
+        if args.topk > 0:
+            print('are you sure you want multiple samples with topk = {}'.format(args.topk))
+
 
 validate_args()
 
 # get dataset
-ds = Synthetic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=12800)
+ds = Synthetic(args.slen, min_galaxies=1, max_galaxies=1, mean_galaxies=1, num_images=12800, brightness = 2000)
 train_loader, test_loader = galaxy_lib.get_train_test_data(ds, batch_size=args.batchsize)
 
 # set up vae
@@ -114,18 +124,25 @@ if args.galaxy_dec_warm_start:
     state_dict = torch.load(args.galaxy_dec_init_file, map_location='cpu')
     galaxy_vae.dec.load_state_dict(state_dict, strict=True)
 
-
-
 galaxy_rnn = galaxy_lib.CelesteRNN(args.slen, one_galaxy_vae=galaxy_vae)
+if args.vae_warm_start:
+    print('loading galaxy vae from ' + args.vae_init_file)
+    state_dict = torch.load(args.vae_init_file, map_location='cpu')
+    galaxy_rnn.load_state_dict(state_dict, strict=True)
+
 galaxy_rnn.cuda()
 
 print("training the one-galaxy autoencoder...")
+print('topk = {}'.format(args.topk))
+print('n_samples = {}'.format(args.n_samples))
+
 filename = args.vae_outdir + args.vae_outfilename
 galaxy_lib.train_module(galaxy_rnn, train_loader, test_loader,
                         epochs = args.epochs,
                         save_every = args.save_every,
                         alpha = 0.0,
                         topk = args.topk,
+                        n_samples = args.n_samples,
                         use_baseline = True,
                         lr = 1e-4,
                         weight_decay = 1e-6,
