@@ -6,9 +6,9 @@ python ../libraries/train_galaxy_vae.py \
 			--save_every 100 \
 			--batchsize 64 \
 			--seed 904 \
-			--topk 3 \
-			--n_samples 1 \
-			--vae_outdir '../galaxy_results_sandbox/topk3/' \
+			--topk 0 \
+			--n_samples 4 \
+			--vae_outdir '../galaxy_results_sandbox/reinforce4/' \
                         --vae_warm_start False \
-			--vae_outfilename 'galaxy_vae_topk3' 
+			--vae_outfilename 'galaxy_vae_reinforce4' 
 			
