@@ -225,7 +225,7 @@ def train_epoch(vae, loader,
 
     return avg_loss
 
-def train_module(vae, train_loader, test_loader, epochs,
+def train_module(vae, train_loader, test_data, epochs,
                         alpha = 0.0, topk = 0, use_baseline = True, n_samples = 1,
                         lr = 1e-4, weight_decay = 1e-6,
                         save_every = 10,
@@ -247,7 +247,7 @@ def train_module(vae, train_loader, test_loader, epochs,
                                     use_baseline = use_baseline,
                                     n_samples = n_samples,
                                     train = False)
-                                    
+
     print('init_loss: ', batch_loss)
 
     batch_losses_array[0] = batch_loss
@@ -265,25 +265,35 @@ def train_module(vae, train_loader, test_loader, epochs,
                                         optimizer = optimizer)
 
         elapsed = timeit.default_timer() - start_time
-        print('[{}] loss: {:.0f}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
+        # print('[{}] loss: {:.0f}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
         batch_losses_array[epoch] = batch_loss.detach().cpu().numpy()
         np.save(filename + '_batch_losses_array', batch_losses_array[:epoch])
 
         if epoch % save_every == 0:
             # plot_reconstruction(vae, ds, epoch)
-            test_loss = train_epoch(vae, test_loader,
-                                            alpha = 0,
-                                            topk = 0,
-                                            use_baseline = False,
-                                            n_samples = 1,
-                                            train = False)
-
-            print('  * test loss: {:.0f}'.format(test_loss))
+            # test_loss = train_epoch(vae, test_loader,
+            #                                 alpha = 0,
+            #                                 topk = 0,
+            #                                 use_baseline = False,
+            #                                 n_samples = 1,
+            #                                 train = False)
+            #
+            # print('  * test loss: {:.0f}'.format(test_loss))
 
             save_filename = filename + "_epoch{}.dat".format(epoch)
             print("writing the network's parameters to " + save_filename)
             torch.save(vae.state_dict(), save_filename)
 
-            test_losses_array.append(test_loss.detach())
 
-            np.save(filename + '_test_losses_array', test_losses_array)
+        _, test_loss = vae.get_pm_loss(test_data['image'],
+                                           test_data['background'],
+                                           test_data['background'],
+                                           alpha = 0.0,
+                                           topk = 0,
+                                           use_baseline = False)
+
+        print('[{}] loss: {:.0f}  \t[{:.1f} seconds]'.format(epoch, test_loss, elapsed))
+
+        test_losses_array.append(test_loss.detach())
+
+        np.save(filename + '_test_losses_array', test_losses_array)

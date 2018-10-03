@@ -103,8 +103,18 @@ validate_args()
 
 # get dataset
 ds = Synthetic(args.slen, min_galaxies=0, max_galaxies=1, mean_galaxies=2, num_images=1280, brightness=90000)
+d2 = Synthetic(args.slen, min_galaxies=0, max_galaxies=1, mean_galaxies=2, num_images=1280, brightness=90000)
 
-train_loader, test_loader = galaxy_lib.get_train_test_data(ds, batch_size=args.batchsize)
+train_loader, _ = galaxy_lib.get_train_test_data(ds, batch_size=args.batchsize)
+
+_, test_loader = galaxy_lib.get_train_test_data(ds2, batch_size=128)
+
+for batch_idx, data in enumerate(test_loader):
+    test_data = data
+    break
+
+print('dim test data: ', test_data['image'].shape)
+
 
 # set up vae
 galaxy_vae = celeste_net.OneGalaxyVAE(args.slen)
@@ -138,7 +148,7 @@ print('topk = {}'.format(args.topk))
 print('n_samples = {}'.format(args.n_samples))
 
 filename = args.vae_outdir + args.vae_outfilename
-galaxy_lib.train_module(galaxy_rnn, train_loader, test_loader,
+galaxy_lib.train_module(galaxy_rnn, train_loader, test_data,
                         epochs = args.epochs,
                         save_every = args.save_every,
                         alpha = 0.0,
