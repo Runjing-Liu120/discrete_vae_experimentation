@@ -103,7 +103,7 @@ validate_args()
 
 # get dataset
 ds = Synthetic(args.slen, min_galaxies=0, max_galaxies=1, mean_galaxies=2, num_images=1280, brightness=90000)
-d2 = Synthetic(args.slen, min_galaxies=0, max_galaxies=1, mean_galaxies=2, num_images=1280, brightness=90000)
+ds2 = Synthetic(args.slen, min_galaxies=0, max_galaxies=1, mean_galaxies=2, num_images=1280, brightness=90000)
 
 train_loader, _ = galaxy_lib.get_train_test_data(ds, batch_size=args.batchsize)
 

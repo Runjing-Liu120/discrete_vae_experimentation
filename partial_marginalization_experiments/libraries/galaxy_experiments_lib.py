@@ -285,9 +285,9 @@ def train_module(vae, train_loader, test_data, epochs,
             torch.save(vae.state_dict(), save_filename)
 
 
-        _, test_loss = vae.get_pm_loss(test_data['image'],
-                                           test_data['background'],
-                                           test_data['background'],
+        _, test_loss = vae.get_pm_loss(test_data['image'].to(device),
+                                           test_data['background'].to(device),
+                                           test_data['background'].to(device),
                                            alpha = 0.0,
                                            topk = 0,
                                            use_baseline = False)
