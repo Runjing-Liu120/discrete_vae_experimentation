@@ -59,10 +59,21 @@ class CelesteRNN(nn.Module):
         # just for myself to make sure I understand this right
         assert (pixel_probs.size(1) - 1) == self.n_discrete_latent
 
-        return pixel_probs
+        always_on = True
+        if always_on:
+            mask = torch.ones(pixel_probs.shape)
+            if always_on:
+                mask[:, -1] = 1.e-16
 
-    def sample_pixel(self, pixel_probs):
-        pixel_dist = Categorical(pixel_probs)
+        return pixel_probs * mask.to(device)
+
+    def sample_pixel(self, pixel_probs, always_on = True):
+        mask = torch.ones(pixel_probs.shape)
+        if always_on:
+            mask[:, -1] = 0
+
+        pixel_dist = Categorical(pixel_probs * mask.to(device))
+
         return pixel_dist.sample()
 
     def get_loss_conditional_a(self, resid_image, image_so_far, var_so_far, pixel_1d):
