@@ -66,6 +66,7 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
                                 use_baseline = False):
 
     # class weights from the variational distribution
+    assert np.all(log_q.detach().cpu().numpy() < 0)
     class_weights = torch.exp(log_q.detach())
 
     # this is the indicator C_\alpha
@@ -102,6 +103,7 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
             class_weights * (1 - concentrated_mask) / (sampled_weight)
 
         conditional_z_sample = sample_class_weights(conditional_class_weights)
+        # print(conditional_z_sample)
 
         # just for my own sanity ...
         assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].cpu().numpy() == 1.), 'sampled_weight {}'.format(sampled_weight)
