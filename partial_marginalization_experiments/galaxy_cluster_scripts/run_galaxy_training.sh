@@ -7,7 +7,7 @@ python ../libraries/train_galaxy_vae.py \
 			--seed 904 \
 			--topk 3 \
 			--n_samples 1 \
-			--vae_outdir '../galaxy_results/testing_alwayson_topk3/' \
+			--vae_outdir '../galaxy_results/testing_star_proto_topk3/' \
                         --vae_warm_start False \
-			--vae_outfilename 'galaxy_vae_topk3' 
-
+			--vae_outfilename 'galaxy_vae_topk3'\
+		

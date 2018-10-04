@@ -250,7 +250,7 @@ def train_module(vae, train_loader, test_loader, epochs,
     {'params': vae.one_galaxy_vae.attn_enc.parameters(), 'lr': 1e-2}],
     lr=lr, weight_decay=weight_decay)
 
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
     test_losses_array = []
     batch_losses_array = np.zeros(epochs)
