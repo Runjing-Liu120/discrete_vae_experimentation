@@ -115,6 +115,7 @@ class CelesteRNN(nn.Module):
                             alpha = 0.0,
                             topk = 0,
                             use_baseline = True,
+                            use_term_one_baseline = True,
                             n_samples = 1):
 
         resid_image = image - image_so_far
@@ -131,7 +132,8 @@ class CelesteRNN(nn.Module):
         # argument to get_partial_marginal_loss
         for k in range(n_samples):
             pm_loss = pm_lib.get_partial_marginal_loss(f_z, log_q, alpha, topk,
-                                        use_baseline = use_baseline)
+                                        use_baseline = use_baseline,
+                                        use_term_one_baseline = use_term_one_baseline)
             avg_pm_loss += pm_loss / n_samples
 
         map_locations = torch.argmax(log_q.detach(), dim = 1)
@@ -202,6 +204,7 @@ def train_epoch(vae, loader,
                 topk = 0,
                 n_samples = 1,
                 use_baseline = True,
+                use_term_one_baseline = True,
                 train = False,
                 optimizer = None):
     if train:
@@ -225,6 +228,7 @@ def train_epoch(vae, loader,
                                         alpha = alpha,
                                         topk = topk,
                                         use_baseline = use_baseline,
+                                        use_term_one_baseline = use_term_one_baseline,
                                         n_samples = n_samples)
 
         if train:
@@ -238,7 +242,9 @@ def train_epoch(vae, loader,
     return avg_loss
 
 def train_module(vae, train_loader, test_loader, epochs,
-                        alpha = 0.0, topk = 0, use_baseline = True, n_samples = 1,
+                        alpha = 0.0, topk = 0, use_baseline = True,
+                        use_term_one_baseline = True,
+                        n_samples = 1,
                         lr = 1e-4, weight_decay = 1e-6,
                         save_every = 10,
                         filename = './galaxy_vae_params',
@@ -261,6 +267,7 @@ def train_module(vae, train_loader, test_loader, epochs,
                                         alpha = alpha,
                                         topk = topk,
                                         use_baseline = use_baseline,
+                                        use_term_one_baseline = use_term_one_baseline, 
                                         n_samples = n_samples,
                                         train = True,
                                         optimizer = optimizer)
