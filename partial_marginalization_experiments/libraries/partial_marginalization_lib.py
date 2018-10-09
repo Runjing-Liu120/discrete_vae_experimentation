@@ -63,8 +63,8 @@ def get_full_loss(f_z, class_weights):
     return full_loss.sum()
 
 def get_partial_marginal_loss(f_z, log_q, alpha, topk,
-                                use_baseline = False,
-                                use_term_one_baseline = False):
+                                use_baseline = True,
+                                use_term_one_baseline = True):
 
     # class weights from the variational distribution
     assert np.all(log_q.detach().cpu().numpy() < 0)
@@ -83,7 +83,7 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
         f_z_i = f_z(summed_indx)
         log_q_i = log_q[seq_tensor, summed_indx]
 
-        if use_term_one_baseline:
+        if (use_term_one_baseline) and (use_baseline):
             # print('using term 1 baseline')
             z_sample2 = sample_class_weights(class_weights)
             baseline = f_z(z_sample2).detach()
