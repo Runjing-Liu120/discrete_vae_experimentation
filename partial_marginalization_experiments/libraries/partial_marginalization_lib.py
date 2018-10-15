@@ -9,6 +9,8 @@ import torch.optim as optim
 from torch.distributions import Normal, Categorical, Bernoulli
 import torch.nn.functional as F
 
+import common_utils as common_utils
+
 import timeit
 
 from copy import deepcopy
@@ -16,13 +18,6 @@ from copy import deepcopy
 import itertools
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-def sample_class_weights(class_weights):
-    # draw a sample from Categorical variable with
-    # probabilities class_weights
-
-    cat_rv = Categorical(probs = class_weights)
-    return cat_rv.sample().detach()
 
 def get_concentrated_mask(class_weights, alpha, topk):
     # returns a logical mask, binary for class_weights > alpha
@@ -85,7 +80,7 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
 
         if (use_term_one_baseline) and (use_baseline):
             # print('using term 1 baseline')
-            z_sample2 = sample_class_weights(class_weights)
+            z_sample2 = common_utils.sample_class_weights(class_weights)
             baseline = f_z(z_sample2).detach()
 
         else:
@@ -104,11 +99,12 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
         conditional_class_weights = \
             class_weights * (1 - concentrated_mask) / (sampled_weight)
 
-        conditional_z_sample = sample_class_weights(conditional_class_weights)
+        conditional_z_sample = common_utils.sample_class_weights(conditional_class_weights)
         # print(conditional_z_sample)
 
         # just for my own sanity ...
-        assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].cpu().numpy() == 1.), 'sampled_weight {}'.format(sampled_weight)
+        assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].cpu().numpy() == 1.), \
+                    'sampled_weight {}'.format(sampled_weight)
 
         f_z_i_sample = f_z(conditional_z_sample)
         log_q_i_sample = log_q[seq_tensor, conditional_z_sample]
@@ -117,11 +113,11 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
             if not use_term_one_baseline:
                 # print('using alt. covariate')
                 # sample from the conditional distribution instead
-                z_sample2 = sample_class_weights(conditional_class_weights)
+                z_sample2 = common_utils.sample_class_weights(conditional_class_weights)
                 baseline2 = f_z(z_sample2).detach()
 
             else:
-                z_sample2 = sample_class_weights(class_weights)
+                z_sample2 = common_utils.sample_class_weights(class_weights)
                 baseline2 = f_z(z_sample2).detach()
         else:
             baseline2 = 0.0
@@ -134,37 +130,6 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
     return (sampled_term * sampled_weight.squeeze()).sum() + summed_term
 
 
-
-def run_SGD(get_loss, params,
-                lr = 1.0, n_steps = 10000,
-                get_full_loss = None):
-
-    # set up optimizer
-    params_list = [{'params': params[key]} for key in params]
-    optimizer = optim.SGD(params_list, lr = lr)
-
-    loss_array = np.zeros(n_steps)
-
-    for i in range(n_steps):
-        # run gradient descent
-        optimizer.zero_grad()
-        # ps_loss = self.get_partial_marginal_loss(alpha, topk)
-        loss = get_loss()
-        loss.backward()
-        optimizer.step()
-
-        # save losses
-        if get_full_loss is not None:
-            full_loss = get_full_loss()
-        else:
-            full_loss = loss
-
-        loss_array[i] = full_loss.detach().numpy()
-        # phi_array[i + 1] = self.experiment_class.var_params.detach().numpy()
-
-    opt_params = params
-
-    return loss_array, opt_params
 
 # class PartialMarginalizationREINFORCE(object):
 #     def __init__(self, experiment_class):
