@@ -93,6 +93,8 @@ def crop_and_normalize_image(image_batch, attn_offset):
 def get_importance_weights(image_batch, attn_offset, prob_off):
     # appends probability of being OFF to the normalized images
     batch_size = image_batch.shape[0]
+    # prevent any negative values
+    image_batch = torch.max(image_batch, torch.Tensor([0.]).to(device))
     normalized_image = crop_and_normalize_image(image_batch, attn_offset)
 
     importance_weights = normalized_image.view(batch_size, -1) * (1 - prob_off)
