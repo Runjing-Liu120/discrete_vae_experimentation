@@ -200,7 +200,8 @@ class GMMExperiments(object):
     def get_pm_loss(self, alpha, topk, use_baseline):
         log_q = self.get_log_q()
         pm_loss = pm_lib.get_partial_marginal_loss(self.f_z, log_q, alpha, topk,
-                                    use_baseline = use_baseline)
+                                    use_baseline = use_baseline,
+                                    use_term_one_baseline = True)
 
         return pm_loss
 
