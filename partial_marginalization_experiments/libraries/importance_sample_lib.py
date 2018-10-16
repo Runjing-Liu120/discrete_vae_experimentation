@@ -17,15 +17,23 @@ from copy import deepcopy
 
 import itertools
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+get_linf_diff = lambda x, y : torch.max(torch.abs(x - y))
+
+def assert_diff(x, y, tol = 1e-12):
+    assert get_linf_diff(x, y) < tol, \
+            'diff = {}'.format(get_linf_diff(x, y))
+
 def get_importance_sampled_loss(f_z, log_q,
                                 importance_weights = None,
                                 use_baseline = True):
     # class weights from the variational distribution
-    assert np.all(log_q.detach().cpu().numpy() < 0)
+    assert (log_q.detach() < 0).all()
     class_weights = torch.exp(log_q.detach())
 
-    assert np.all(np.abs(class_weights.numpy().sum(axis = 1) - 1.0) < 1e-6), \
-            np.max(np.abs(class_weights.numpy().sum(axis = 1) - 1.0))
+    # why is the tolerance so bad?
+    assert_diff(class_weights.sum(1), torch.Tensor([1.0]), tol = 1e-4)
 
     seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])])
 
@@ -33,17 +41,22 @@ def get_importance_sampled_loss(f_z, log_q,
     if importance_weights is not None:
         assert importance_weights.shape[0] == log_q.shape[0]
         assert importance_weights.shape[1] == log_q.shape[1]
-        assert np.all(np.abs(importance_weights.cpu().numpy().sum(axis = 1) - 1.0) < 1e-4),\
-                np.max(np.abs(importance_weights.cpu().numpy().sum(axis = 1) - 1.0))
+        # why is the tolerance so bad?
+        assert_diff(importance_weights.sum(1), torch.Tensor([1.0]), tol = 1e-4)
 
+        # sample from importance weights
         z_sample = common_utils.sample_class_weights(importance_weights)
+
+        # reweight accordingly
         importance_weighting = class_weights[seq_tensor, z_sample] / \
                                     importance_weights[seq_tensor, z_sample]
+        assert len(importance_weighting) == len(z_sample)
     else:
         z_sample = common_utils.sample_class_weights(class_weights)
         importance_weighting = 1.0
 
     f_z_i_sample = f_z(z_sample)
+    assert len(f_z_i_sample) == len(z_sample)
     log_q_i_sample = log_q[seq_tensor, z_sample]
 
     if use_baseline:
@@ -55,6 +68,7 @@ def get_importance_sampled_loss(f_z, log_q,
     reinforce_grad_sample = \
         common_utils.get_reinforce_grad_sample(f_z_i_sample, log_q_i_sample, \
                                                 baseline) + f_z_i_sample
+    assert len(reinforce_grad_sample) == len(z_sample)
 
     return (reinforce_grad_sample * importance_weighting).sum()
 
@@ -62,7 +76,7 @@ def get_importance_sampled_loss(f_z, log_q,
 
 #####################
 # functions for importance sampling galaxy images
-def get_normalized_image(image_batch, attn_offset):
+def crop_and_normalize_image(image_batch, attn_offset):
     # normalizes the images to get importance weights
 
     slen = image_batch.shape[-1]
@@ -79,7 +93,7 @@ def get_normalized_image(image_batch, attn_offset):
 def get_importance_weights(image_batch, attn_offset, prob_off):
     # appends probability of being OFF to the normalized images
     batch_size = image_batch.shape[0]
-    normalized_image = get_normalized_image(image_batch, attn_offset)
+    normalized_image = crop_and_normalize_image(image_batch, attn_offset)
 
     importance_weights = normalized_image.view(batch_size, -1) * (1 - prob_off)
     importance_weight_off = torch.ones((batch_size, 1)) * prob_off
@@ -93,7 +107,7 @@ def importance_sampled_galaxy_loss(galaxy_vae, image, image_so_far,
 
     resid_image = image - image_so_far
     class_weights = galaxy_vae.get_pixel_probs(resid_image, var_so_far)
-    assert np.all(np.abs(class_weights.sum(1).cpu().detach().numpy() - 1.0) < 1e-6)
+    assert_diff(class_weights.sum(1), torch.Tensor([1.0]), tol = 1e-4)
 
     log_q = torch.log(class_weights)
 
@@ -120,3 +134,92 @@ def importance_sampled_galaxy_loss(galaxy_vae, image, image_so_far,
     map_cond_losses = f_z(map_locations).mean()
 
     return ps_loss, map_cond_losses
+
+### This is copied over from galaxy experiments lib
+### probably a better way to wrap this to not replicate code
+def train_epoch(vae, loader,
+                n_samples = 1,
+                use_baseline = True,
+                use_importance_sample = True,
+                train = False,
+                optimizer = None):
+    if train:
+        assert optimizer is not None
+        vae.train()
+    else:
+        vae.eval()
+
+    avg_loss = 0.0
+
+    for batch_idx, data in enumerate(loader):
+        image = data["image"].to(device)
+        background = data["background"].to(device)
+
+        if train:
+            optimizer.zero_grad()
+
+        pm_loss, loss = importance_sampled_galaxy_loss(vae, image = image,
+                                            image_so_far = background, # NOTE: we are only doing one detection atm
+                                            var_so_far = background,
+                                            use_importance_sample = use_importance_sample,
+                                            use_baseline = use_baseline)
+
+        if train:
+            pm_loss.backward()
+            optimizer.step()
+
+        avg_loss += loss * image.shape[0]
+
+    avg_loss /= len(loader.sampler)
+
+    return avg_loss
+
+def train_module(vae, train_loader, test_loader, epochs,
+                        use_baseline = True,
+                        use_importance_sample = True,
+                        lr = 1e-4, weight_decay = 1e-6,
+                        save_every = 10,
+                        filename = './galaxy_vae_params',
+                        seed = 245345):
+
+    optimizer = optim.Adam(
+    [{'params': vae.one_galaxy_vae.enc.parameters()},
+    {'params': vae.one_galaxy_vae.dec.parameters()},
+    {'params': vae.one_galaxy_vae.attn_enc.parameters(), 'lr': 1e-5}],
+    lr=lr, weight_decay=weight_decay)
+
+    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+
+    test_losses_array = []
+    batch_losses_array = np.zeros(epochs)
+    for epoch in range(0, epochs):
+        np.random.seed(seed + epoch)
+        start_time = timeit.default_timer()
+        batch_loss = train_epoch(vae, train_loader,
+                                use_baseline = use_baseline,
+                                use_importance_sample = use_importance_sample,
+                                train = True,
+                                optimizer = optimizer)
+
+        elapsed = timeit.default_timer() - start_time
+        print('[{}] loss: {:.0f}  \t[{:.1f} seconds]'.format(epoch, batch_loss, elapsed))
+        batch_losses_array[epoch] = batch_loss.detach().cpu().numpy()
+        np.save(filename + '_batch_losses_array', batch_losses_array[:epoch])
+
+        if epoch % save_every == 0:
+            # plot_reconstruction(vae, ds, epoch)
+            test_loss = train_epoch(vae, test_loader,
+                                    use_baseline = False,
+                                    use_importance_sample = False,
+                                    train = False,
+                                    optimizer = None)
+
+            print('  * test loss: {:.0f}'.format(test_loss))
+
+            save_filename = filename + "_epoch{}.dat".format(epoch)
+            print("writing the network's parameters to " + save_filename)
+            torch.save(vae.state_dict(), save_filename)
+
+            test_losses_array.append(test_loss.detach())
+
+            np.save(filename + '_test_losses_array', test_losses_array)
