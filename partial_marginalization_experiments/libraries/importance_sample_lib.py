@@ -119,7 +119,7 @@ def importance_sampled_galaxy_loss(galaxy_vae, image, image_so_far,
         attn_offset = galaxy_vae.attn_offset
         prob_off = class_weights.detach()[:, -1].view(-1, 1)
         importance_weights = \
-            get_importance_weights(image_so_far, attn_offset, prob_off)
+            get_importance_weights(image_so_far.detach(), attn_offset, prob_off)
     else:
         importance_weights = None
 

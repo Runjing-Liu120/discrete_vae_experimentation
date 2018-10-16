@@ -33,6 +33,8 @@ parser.add_argument('--epochs', type=int, default=1000, metavar='N',
                     help='number of epochs to train (default: 1000)')
 parser.add_argument('--use_importance_sample', type = distutils.util.strtobool,
                     default = True, help = 'whether to importance sample')
+parser.add_argument('--use_baseline', type = distutils.util.strtobool,
+                    default = True, help = 'whether to use a baseline')
 
 # data parameters
 parser.add_argument('--slen', type=int, default=31, metavar='N',
@@ -133,7 +135,7 @@ filename = args.vae_outdir + args.vae_outfilename
 imp_lib.train_module(galaxy_rnn, train_loader, test_loader,
                         epochs = args.epochs,
                         save_every = args.save_every,
-                        use_baseline = True,
+                        use_baseline = args.use_baseline,
                         use_importance_sample = args.use_importance_sample,
                         lr = 1e-4,
                         weight_decay = 1e-6,
