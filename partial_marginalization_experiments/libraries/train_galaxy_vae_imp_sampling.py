@@ -20,6 +20,7 @@ import celeste_net
 from datasets import Synthetic
 
 import galaxy_experiments_lib as galaxy_lib
+import importance_sample_lib as imp_lib
 
 import os
 
@@ -28,12 +29,12 @@ parser = argparse.ArgumentParser(description='CelesteNet')
 # training options
 parser.add_argument('--batchsize', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
-parser.add_argument('--topk', type = int, default = 5,
-                    help='how many to integrate out')
-parser.add_argument('--n_samples', type = int, default = 1,
-                    help='how many samples for REINFORCE')
 parser.add_argument('--epochs', type=int, default=1000, metavar='N',
                     help='number of epochs to train (default: 1000)')
+parser.add_argument('--use_importance_sample', type = distutils.util.strtobool,
+                    default = True, help = 'whether to importance sample')
+parser.add_argument('--use_baseline', type = distutils.util.strtobool,
+                    default = True, help = 'whether to use a baseline')
 
 # data parameters
 parser.add_argument('--slen', type=int, default=31, metavar='N',
@@ -68,7 +69,7 @@ parser.add_argument('--attn_enc_init_file', type = str,
                     help = 'file from which to load galaxy encoder')
 
 parser.add_argument('--vae_warm_start', type = distutils.util.strtobool,
-                    default = True, help = 'whether to initialize the entire')
+                    default = False, help = 'whether to initialize the entire')
 parser.add_argument('--vae_init_file', type = str,
                     help = 'file from which to load entire vae')
 
@@ -93,10 +94,6 @@ def validate_args():
 
     if args.galaxy_dec_warm_start:
         assert os.path.isfile(args.galaxy_dec_init_file)
-
-    if args.n_samples > 1:
-        if args.topk > 0:
-            print('are you sure you want multiple samples with topk = {}'.format(args.topk))
 
 
 validate_args()
@@ -133,18 +130,13 @@ if args.vae_warm_start:
 galaxy_rnn.cuda()
 
 print("training the one-galaxy autoencoder...")
-print('topk = {}'.format(args.topk))
-print('n_samples = {}'.format(args.n_samples))
 
 filename = args.vae_outdir + args.vae_outfilename
-galaxy_lib.train_module(galaxy_rnn, train_loader, test_loader,
+imp_lib.train_module(galaxy_rnn, train_loader, test_loader,
                         epochs = args.epochs,
                         save_every = args.save_every,
-                        alpha = 0.0,
-                        topk = args.topk,
-                        n_samples = args.n_samples,
-                        use_baseline = True,
-                        use_term_one_baseline = False,
+                        use_baseline = args.use_baseline,
+                        use_importance_sample = args.use_importance_sample,
                         lr = 1e-4,
                         weight_decay = 1e-6,
                         filename = filename,

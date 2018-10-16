@@ -102,3 +102,21 @@ class BernoulliExperiments(object):
     #     f_z = self.get_loss_from_draw_i(i) * (concentrated_mask[i] == 0.).float().detach()
     #
     #     return self.get_bernoulli_log_prob_i(phi, i) * (f_z - cv).detach()
+
+def sample_bern_gradient(phi0, bern_experiment, topk, alpha,
+                            use_baseline = True,
+                            n_samples = 10000):
+    params = [phi0]
+    optimizer = optim.SGD(params, lr = 1.0)
+
+    grad_array = torch.zeros(n_samples)
+
+    for i in range(n_samples):
+        bern_experiment.set_var_params(deepcopy(phi0))
+        optimizer.zero_grad()
+        ps_loss = bern_experiment.get_pm_loss(alpha = alpha, topk = topk, use_baseline = True)
+        ps_loss.backward()
+
+        grad_array[i] = bern_experiment.var_params['phi'].grad
+
+    return grad_array

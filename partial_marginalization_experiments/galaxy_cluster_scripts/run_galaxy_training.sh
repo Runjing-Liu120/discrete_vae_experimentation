@@ -10,4 +10,3 @@ python ../libraries/train_galaxy_vae.py \
 			--vae_outdir '../galaxy_results_cv_experiments/topk1/' \
                         --vae_warm_start False \
 			--vae_outfilename 'galaxy_vae_topk1'\
-		

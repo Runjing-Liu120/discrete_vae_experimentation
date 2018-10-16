@@ -51,7 +51,10 @@ class CelesteRNN(nn.Module):
 
         # number of discrete random variables
         # TODO: please check this ...
-        self.n_discrete_latent = (sout - 2 * self.one_galaxy_vae.attn_enc.attn_offset)**2
+        self.attn_offset = self.one_galaxy_vae.attn_enc.attn_offset
+        self.n_discrete_latent = (sout - 2 * self.attn_offset)**2
+
+        self.always_on = True
 
     def get_pixel_probs(self, resid_image, var_so_far):
         pixel_probs = self.one_galaxy_vae.attn_enc(resid_image, var_so_far)
@@ -59,23 +62,14 @@ class CelesteRNN(nn.Module):
         # just for myself to make sure I understand this right
         assert (pixel_probs.size(1) - 1) == self.n_discrete_latent
 
-        always_on = True
-        if always_on:
+        if self.always_on:
             mask = torch.ones(pixel_probs.shape)
-            if always_on:
-                mask[:, -1] = 1.e-16
-            pixel_probs = pixel_probs * mask.to(device) / pixel_probs.sum(dim = 1, keepdim = True)
+            mask[:, -1] = 1.e-16
+
+            pixel_probs_masked = pixel_probs * mask.to(device)
+            pixel_probs = pixel_probs_masked / pixel_probs_masked.sum(dim = 1, keepdim = True)
 
         return pixel_probs
-
-    def sample_pixel(self, pixel_probs, always_on = True):
-        mask = torch.ones(pixel_probs.shape)
-        if always_on:
-            mask[:, -1] = 0
-
-        pixel_dist = Categorical(pixel_probs * mask.to(device))
-
-        return pixel_dist.sample()
 
     def get_loss_conditional_a(self, resid_image, image_so_far, var_so_far, pixel_1d):
         image = image_so_far + resid_image
@@ -267,7 +261,7 @@ def train_module(vae, train_loader, test_loader, epochs,
                                         alpha = alpha,
                                         topk = topk,
                                         use_baseline = use_baseline,
-                                        use_term_one_baseline = use_term_one_baseline, 
+                                        use_term_one_baseline = use_term_one_baseline,
                                         n_samples = n_samples,
                                         train = True,
                                         optimizer = optimizer)
