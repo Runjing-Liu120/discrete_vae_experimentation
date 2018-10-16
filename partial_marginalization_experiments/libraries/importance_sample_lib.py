@@ -33,7 +33,7 @@ def get_importance_sampled_loss(f_z, log_q,
     class_weights = torch.exp(log_q.detach())
 
     # why is the tolerance so bad?
-    assert_diff(class_weights.sum(1), torch.Tensor([1.0]), tol = 1e-4)
+    assert_diff(class_weights.sum(1), torch.Tensor([1.0]).to(device), tol = 1e-4)
 
     seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])])
 
@@ -42,7 +42,7 @@ def get_importance_sampled_loss(f_z, log_q,
         assert importance_weights.shape[0] == log_q.shape[0]
         assert importance_weights.shape[1] == log_q.shape[1]
         # why is the tolerance so bad?
-        assert_diff(importance_weights.sum(1), torch.Tensor([1.0]), tol = 1e-4)
+        assert_diff(importance_weights.sum(1), torch.Tensor([1.0]).to(device), tol = 1e-4)
 
         # sample from importance weights
         z_sample = common_utils.sample_class_weights(importance_weights)
@@ -96,7 +96,7 @@ def get_importance_weights(image_batch, attn_offset, prob_off):
     normalized_image = crop_and_normalize_image(image_batch, attn_offset)
 
     importance_weights = normalized_image.view(batch_size, -1) * (1 - prob_off)
-    importance_weight_off = torch.ones((batch_size, 1)) * prob_off
+    importance_weight_off = torch.ones((batch_size, 1)).to(device) * prob_off
 
     return torch.cat((importance_weights, importance_weight_off), 1)
 
@@ -107,7 +107,7 @@ def importance_sampled_galaxy_loss(galaxy_vae, image, image_so_far,
 
     resid_image = image - image_so_far
     class_weights = galaxy_vae.get_pixel_probs(resid_image, var_so_far)
-    assert_diff(class_weights.sum(1), torch.Tensor([1.0]), tol = 1e-4)
+    assert_diff(class_weights.sum(1), torch.Tensor([1.0]).to(device), tol = 1e-4)
 
     log_q = torch.log(class_weights)
 

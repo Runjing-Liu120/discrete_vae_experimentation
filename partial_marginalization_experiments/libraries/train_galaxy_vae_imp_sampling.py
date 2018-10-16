@@ -20,7 +20,7 @@ import celeste_net
 from datasets import Synthetic
 
 import galaxy_experiments_lib as galaxy_lib
-import importance_sampling_lib as imp_lib
+import importance_sample_lib as imp_lib
 
 import os
 
@@ -93,10 +93,6 @@ def validate_args():
     if args.galaxy_dec_warm_start:
         assert os.path.isfile(args.galaxy_dec_init_file)
 
-    if args.n_samples > 1:
-        if args.topk > 0:
-            print('are you sure you want multiple samples with topk = {}'.format(args.topk))
-
 
 validate_args()
 
@@ -134,7 +130,7 @@ galaxy_rnn.cuda()
 print("training the one-galaxy autoencoder...")
 
 filename = args.vae_outdir + args.vae_outfilename
-galaxy_lib.train_module(galaxy_rnn, train_loader, test_loader,
+imp_lib.train_module(galaxy_rnn, train_loader, test_loader,
                         epochs = args.epochs,
                         save_every = args.save_every,
                         use_baseline = True,
