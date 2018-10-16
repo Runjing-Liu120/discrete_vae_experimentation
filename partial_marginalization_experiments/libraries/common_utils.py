@@ -24,6 +24,9 @@ def sample_class_weights(class_weights):
     cat_rv = Categorical(probs = class_weights)
     return cat_rv.sample().detach()
 
+def get_reinforce_grad_sample(f_z_i, log_q_i, baseline = 0.0):
+    return (f_z_i.detach() - baseline) * log_q_i
+
 def run_SGD(get_loss, params,
                 lr = 1.0, n_steps = 10000,
                 get_full_loss = None):

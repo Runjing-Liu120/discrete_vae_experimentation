@@ -44,11 +44,6 @@ def get_concentrated_mask(class_weights, alpha, topk):
 
     return mask_alpha * mask_topk, topk_domain, seq_tensor
 
-
-def get_reinforce_grad_sample(f_z_i, log_q_i, baseline = 0.0):
-    return (f_z_i.detach() - baseline) * log_q_i
-
-
 def get_full_loss(f_z, class_weights):
 
     full_loss = 0.0
@@ -64,6 +59,8 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
     # class weights from the variational distribution
     assert np.all(log_q.detach().cpu().numpy() < 0)
     class_weights = torch.exp(log_q.detach())
+    # assert np.all(np.abs(class_weights.cpu().sum(1).numpy() - 1.0) < 1e-6), \
+    #             np.max(np.abs(class_weights.cpu().sum(1).numpy() - 1.0))
 
     # this is the indicator C_\alpha
     concentrated_mask, topk_domain, seq_tensor = \
@@ -86,7 +83,8 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
         else:
             baseline = 0.0
 
-        reinforce_grad_sample = get_reinforce_grad_sample(f_z_i, log_q_i, baseline)
+        reinforce_grad_sample = \
+                common_utils.get_reinforce_grad_sample(f_z_i, log_q_i, baseline)
 
         summed_term = summed_term + \
                         ((reinforce_grad_sample + f_z_i) * \
@@ -122,7 +120,8 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
         else:
             baseline2 = 0.0
 
-        sampled_term = get_reinforce_grad_sample(f_z_i_sample, log_q_i_sample, baseline2) + f_z_i_sample
+        sampled_term = common_utils.get_reinforce_grad_sample(f_z_i_sample,
+                                    log_q_i_sample, baseline2) + f_z_i_sample
 
     else:
         sampled_term = 0.
