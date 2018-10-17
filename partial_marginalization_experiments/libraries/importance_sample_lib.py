@@ -21,6 +21,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 get_linf_diff = lambda x, y : torch.max(torch.abs(x - y))
 
+softmax = torch.nn.Softmax(dim = 1)
+
 def assert_diff(x, y, tol = 1e-12):
     assert get_linf_diff(x, y) < tol, \
             'diff = {}'.format(get_linf_diff(x, y))
@@ -98,6 +100,7 @@ def get_importance_weights(image_batch, attn_offset, prob_off):
     image_batch_reshaped = image_batch_cropped.view(batch_size, -1)
     image_batch_normalized = image_batch_reshaped \
                 / image_batch_reshaped.sum(dim = 1, keepdim = True)
+    # image_batch_normalized  = softmax(image_batch_reshaped * 0.005)
 
     importance_weights = image_batch_normalized * (1 - prob_off)
     importance_weight_off = torch.ones((batch_size, 1)).to(device) * prob_off
@@ -141,10 +144,12 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
         a_sample[was_on == 0.] = importance_weights.shape[-1] - 1
 
         # reweight accordingly
+        # print('class weights: ', class_weights.detach()[seq_tensor, a_sample])
+        # print('imp weights: ', importance_weights[seq_tensor, a_sample])
         importance_reweighting_iter = importance_reweighting_iter * \
                                     class_weights.detach()[seq_tensor, a_sample] / \
                                     importance_weights[seq_tensor, a_sample]
-
+        # print('importance_reweighting_iter', importance_reweighting_iter)
         # get reconstructions
         recon_mean, recon_var, is_on, kl_z = \
             galaxy_vae.sample_conditional_a(\
@@ -168,7 +173,7 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
 
         was_on = was_on * is_on
 
-        print(importance_reweighting_iter)
+        # print(importance_reweighting_iter)
 
     # get recon loss:
     recon_losses = -Normal(recon_means, recon_vars.sqrt()).log_prob(image)
@@ -176,9 +181,9 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
 
     neg_elbo = recon_losses + kl_as + kl_zs
 
-    print(neg_elbo.shape)
-    print(log_qs.shape)
-    print(importance_reweighting_iter.shape)
+    # print(neg_elbo.shape)
+    # print(log_qs.shape)
+    # print(importance_reweighting_iter.shape)
 
 
     ps_loss = ((neg_elbo.detach() * log_qs + neg_elbo) * importance_reweighting_iter.detach()).sum()
