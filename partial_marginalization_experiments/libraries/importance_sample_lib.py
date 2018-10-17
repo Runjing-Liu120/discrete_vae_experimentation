@@ -135,11 +135,12 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
             importance_weights = class_weights.detach()
 
         # sample from importance weights
-        a_sample = common_utils.sample_class_weights(importance_weights)
-        a_sample[was_on == 0.] = importance_weights.shape[-1]
+        a_sample = common_utils.sample_class_weights(importance_weights).detach()
+        a_sample[was_on == 0.] = importance_weights.shape[-1] - 1
 
         # reweight accordingly
-        importance_reweighting_iter *= class_weights.detach()[seq_tensor, a_sample] / \
+        importance_reweighting_iter = importance_reweighting_iter * \
+                                    class_weights.detach()[seq_tensor, a_sample] / \
                                     importance_weights[seq_tensor, a_sample]
 
         # get reconstructions
@@ -163,7 +164,7 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
 
         log_qs = log_qs + log_class_weights_sampled * was_on
 
-        was_on *= is_on
+        was_on = was_on * is_on
 
     # get recon loss:
     recon_losses = -Normal(recon_means, recon_vars.sqrt()).log_prob(image)
@@ -180,7 +181,7 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
     # map_locations = torch.argmax(log_q.detach(), dim = 1)
     # map_cond_losses = f_z(map_locations).mean()
 
-    return ps_loss, neg_elbo.mean()
+    return ps_loss, neg_elbo.detach().mean()
 
 ### This is copied over from galaxy experiments lib
 ### probably a better way to wrap this to not replicate code
