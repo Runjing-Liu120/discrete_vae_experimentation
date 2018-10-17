@@ -138,11 +138,9 @@ def forward_importance_sampled(galaxy_vae, resid_image, recon_vars, was_on,
     return recon_mean, recon_var, is_on, kl_z, importance_weights, \
                 class_weights, a_sample
 
-def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
+def forward_multiple_detections(galaxy_vae, image, background,
                                     use_importance_sample = True,
-                                    use_baseline = True,
                                     max_detections = 1):
-
     recon_means = background
     recon_vars = background
 
@@ -195,7 +193,31 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
 
     neg_elbo = recon_losses + kl_as + kl_zs
 
-    ps_loss = ((neg_elbo.detach() * log_qs + neg_elbo) * importance_reweighting_iter.detach()).sum()
+    return neg_elbo, recon_means, log_qs, importance_reweighting_iter
+
+
+def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
+                                    use_importance_sample = True,
+                                    use_baseline = True,
+                                    max_detections = 1):
+
+    neg_elbo, recon_means, log_qs, importance_reweighting_iter = \
+        forward_multiple_detections(galaxy_vae, image, background,
+                                use_importance_sample = use_importance_sample,
+                                max_detections = max_detections)
+
+    if use_baseline:
+        neg_elbo2, _, _, _ = \
+            forward_multiple_detections(galaxy_vae, image, background,
+                                    use_importance_sample = use_importance_sample,
+                                    max_detections = max_detections)
+
+        neg_elbo2 = neg_elbo2.detach()
+    else:
+        neg_elbo2 = 0.
+
+    f = (neg_elbo.detach() - neg_elbo2)
+    ps_loss = ((f * log_qs + neg_elbo) * importance_reweighting_iter.detach()).sum()
 
     return ps_loss, neg_elbo.detach().mean(), recon_means
 
