@@ -93,17 +93,20 @@ class CelesteRNN(nn.Module):
         recon_mean, recon_var = self.one_galaxy_vae.dec(is_on, pixel_2d, z_sample)
 
         # NOTE: we will have to the recon means once we do more detections
-        recon_means = recon_mean + image_so_far
-        recon_vars = recon_var + var_so_far
+        # recon_means = recon_mean + image_so_far
+        # recon_vars = recon_var + var_so_far
 
-        return recon_means, recon_vars, is_on, kl_z
+        return recon_mean, recon_var, is_on, kl_z
 
     def get_loss_conditional_a(self, resid_image, image_so_far, var_so_far, pixel_1d):
 
         image = image_so_far + resid_image
 
-        recon_means, recon_vars, is_on, kl_z = \
+        recon_mean, recon_var, is_on, kl_z = \
             self.sample_conditional_a(resid_image, image_so_far, var_so_far, pixel_1d)
+
+        recon_means = recon_mean + image_so_far
+        recon_vars = recon_var + var_so_far
 
         recon_losses = -Normal(recon_means, recon_vars.sqrt()).log_prob(image)
 

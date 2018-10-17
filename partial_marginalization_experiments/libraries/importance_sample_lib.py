@@ -102,40 +102,84 @@ def get_importance_weights(image_batch, attn_offset, prob_off):
 
     return torch.cat((importance_weights, importance_weight_off), 1)
 
-def importance_sampled_galaxy_loss(galaxy_vae, image, image_so_far,
-                                    var_so_far,
+def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
                                     use_importance_sample = True,
-                                    use_baseline = True):
+                                    use_baseline = True,
+                                    max_detections = 1):
 
-    resid_image = image - image_so_far
-    class_weights = galaxy_vae.get_pixel_probs(resid_image, var_so_far)
-    assert_diff(class_weights.sum(1), torch.Tensor([1.0]).to(device), tol = 1e-4)
+    recon_means = background
+    recon_vars = background
 
-    log_q = torch.log(class_weights)
+    kl_zs = 0.
+    kl_as = 0.
+    log_qs = 0.
 
-    # kl term
-    kl_a = (class_weights * log_q).sum()
+    was_on = torch.ones(image.shape[0]).to(device)
 
-    # get importance sampling weights
-    if use_importance_sample:
-        attn_offset = galaxy_vae.attn_offset
-        prob_off = class_weights.detach()[:, -1].view(-1, 1)
-        importance_weights = \
-            get_importance_weights(resid_image.detach(), attn_offset, prob_off)
-    else:
-        importance_weights = None
+    importance_reweighting_iter = 1.
 
-    f_z = lambda i : galaxy_vae.get_loss_conditional_a(\
-                        resid_image, image_so_far, var_so_far, i)[0] + kl_a
+    seq_tensor = torch.LongTensor([i for i in range(image.shape[0])])
 
-    ps_loss = get_importance_sampled_loss(f_z, log_q,
-                                importance_weights = importance_weights,
-                                use_baseline = use_baseline)
+    for i in range(max_detections):
+        resid_image = image - recon_means
+        class_weights = galaxy_vae.get_pixel_probs(resid_image, recon_vars)
+        assert_diff(class_weights.sum(1), torch.Tensor([1.0]).to(device), tol = 1e-4)
 
-    map_locations = torch.argmax(log_q.detach(), dim = 1)
-    map_cond_losses = f_z(map_locations).mean()
+        # get importance sampling weights
+        if use_importance_sample:
+            attn_offset = galaxy_vae.attn_offset
+            prob_off = class_weights.detach()[:, -1].view(-1, 1)
+            importance_weights = \
+                get_importance_weights(resid_image.detach(), attn_offset, prob_off)
+        else:
+            importance_weights = class_weights.detach()
 
-    return ps_loss, map_cond_losses
+        # sample from importance weights
+        a_sample = common_utils.sample_class_weights(importance_weights)
+        a_sample[was_on == 0.] = importance_weights.shape[-1]
+
+        # reweight accordingly
+        importance_reweighting_iter *= class_weights.detach()[seq_tensor, a_sample] / \
+                                    importance_weights[seq_tensor, a_sample]
+
+        # get reconstructions
+        recon_mean, recon_var, is_on, kl_z = \
+            galaxy_vae.sample_conditional_a(\
+                resid_image, recon_means, recon_vars, a_sample)
+
+        kl_zs += kl_z
+
+        recon_means += recon_mean
+        recon_vars += recon_var
+
+        # kl term
+        # kl_as += (class_weights * log_q).sum() * is_on
+
+        class_weights_sampled = class_weights[seq_tensor, a_sample]
+        log_class_weights_sampled = torch.log(class_weights_sampled)
+        kl_as += class_weights_sampled * torch.log(class_weights_sampled) * was_on
+
+
+        log_qs += log_class_weights_sampled * was_on
+
+        was_on *= is_on
+
+    # get recon loss:
+    recon_losses = -Normal(recon_means, recon_vars.sqrt()).log_prob(image)
+    recon_losses = recon_losses.view(image.size(0), -1).sum(1)
+
+    neg_elbo = recon_losses + kl_as + kl_zs
+
+    # print(neg_elbo.shape)
+    # print(log_qs.shape)
+    # print(importance_reweighting_iter.shape)
+
+    ps_loss = ((neg_elbo.detach() * log_qs + neg_elbo) * importance_reweighting_iter).sum()
+
+    # map_locations = torch.argmax(log_q.detach(), dim = 1)
+    # map_cond_losses = f_z(map_locations).mean()
+
+    return ps_loss, neg_elbo.mean()
 
 ### This is copied over from galaxy experiments lib
 ### probably a better way to wrap this to not replicate code
@@ -143,6 +187,7 @@ def train_epoch(vae, loader,
                 n_samples = 1,
                 use_baseline = True,
                 use_importance_sample = True,
+                max_detections = 1,
                 train = False,
                 optimizer = None):
     if train:
@@ -160,11 +205,10 @@ def train_epoch(vae, loader,
         if train:
             optimizer.zero_grad()
 
-        pm_loss, loss = importance_sampled_galaxy_loss(vae, image = image,
-                                            image_so_far = background, # NOTE: we are only doing one detection atm
-                                            var_so_far = background,
+        pm_loss, loss = get_importance_sampled_galaxy_loss(vae, image, background,
                                             use_importance_sample = use_importance_sample,
-                                            use_baseline = use_baseline)
+                                            use_baseline = use_baseline,
+                                            max_detections = max_detections)
 
         if train:
             pm_loss.backward()
@@ -179,6 +223,7 @@ def train_epoch(vae, loader,
 def train_module(vae, train_loader, test_loader, epochs,
                         use_baseline = True,
                         use_importance_sample = True,
+                        max_detections = 1,
                         lr = 1e-4, weight_decay = 1e-6,
                         save_every = 10,
                         filename = './galaxy_vae_params',
@@ -200,6 +245,7 @@ def train_module(vae, train_loader, test_loader, epochs,
         batch_loss = train_epoch(vae, train_loader,
                                 use_baseline = use_baseline,
                                 use_importance_sample = use_importance_sample,
+                                max_detections = max_detections,
                                 train = True,
                                 optimizer = optimizer)
 
@@ -213,6 +259,7 @@ def train_module(vae, train_loader, test_loader, epochs,
             test_loss = train_epoch(vae, test_loader,
                                     use_baseline = False,
                                     use_importance_sample = False,
+                                    max_detections = max_detections,
                                     train = False,
                                     optimizer = None)
 
