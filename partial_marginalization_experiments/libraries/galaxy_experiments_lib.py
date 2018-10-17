@@ -71,7 +71,7 @@ class CelesteRNN(nn.Module):
 
         return pixel_probs
 
-    def sample_conditional_a(self, resid_image, image_so_far, var_so_far, pixel_1d):
+    def sample_conditional_a(self, resid_image, var_so_far, pixel_1d):
 
         is_on = (pixel_1d < (self.n_discrete_latent - 1)).float()
 
