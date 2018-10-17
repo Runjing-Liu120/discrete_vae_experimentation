@@ -147,20 +147,21 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
             galaxy_vae.sample_conditional_a(\
                 resid_image, recon_means, recon_vars, a_sample)
 
-        kl_zs += kl_z
+        kl_zs = kl_zs + kl_z
 
-        recon_means += recon_mean
-        recon_vars += recon_var
+        recon_means = recon_means + recon_mean
+        recon_vars = recon_vars + recon_var
 
         # kl term
         # kl_as += (class_weights * log_q).sum() * is_on
 
         class_weights_sampled = class_weights[seq_tensor, a_sample]
         log_class_weights_sampled = torch.log(class_weights_sampled)
-        kl_as += class_weights_sampled * torch.log(class_weights_sampled) * was_on
+        kl_as = kl_as + \
+            class_weights_sampled * torch.log(class_weights_sampled) * was_on
 
 
-        log_qs += log_class_weights_sampled * was_on
+        log_qs = log_qs + log_class_weights_sampled * was_on
 
         was_on *= is_on
 
