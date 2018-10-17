@@ -76,28 +76,30 @@ def get_importance_sampled_loss(f_z, log_q,
 
 #####################
 # functions for importance sampling galaxy images
-def crop_and_normalize_image(image_batch, attn_offset):
+def crop_image_sum_channels(image_batch, attn_offset):
     # normalizes the images to get importance weights
 
     slen = image_batch.shape[-1]
+    batchsize = image_batch.shape[0]
     image_batch_cropped = image_batch[:, :, attn_offset:(slen - attn_offset), \
                                             attn_offset:(slen - attn_offset)]
 
     image_batch_cropped_channel_sumed = image_batch_cropped.sum(dim = 1)
-    image_batch_cropped_normalized = \
-        image_batch_cropped_channel_sumed / \
-        image_batch_cropped_channel_sumed.sum(dim = 1, keepdim = True).sum(dim = 2, keepdim = True)
 
-    return image_batch_cropped_normalized
+    return image_batch_cropped_channel_sumed
 
 def get_importance_weights(image_batch, attn_offset, prob_off):
     # appends probability of being OFF to the normalized images
     batch_size = image_batch.shape[0]
     # prevent any negative values
     image_batch = torch.max(image_batch, torch.Tensor([0.]).to(device))
-    normalized_image = crop_and_normalize_image(image_batch, attn_offset)
+    image_batch_cropped = crop_image_sum_channels(image_batch, attn_offset)
 
-    importance_weights = normalized_image.view(batch_size, -1) * (1 - prob_off)
+    image_batch_reshaped = image_batch_cropped.view(batch_size, -1)
+    image_batch_normalized = image_batch_reshaped \
+                / image_batch_reshaped.sum(dim = 1, keepdim = True)
+
+    importance_weights = image_batch_normalized * (1 - prob_off)
     importance_weight_off = torch.ones((batch_size, 1)).to(device) * prob_off
 
     return torch.cat((importance_weights, importance_weight_off), 1)
@@ -166,22 +168,25 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
 
         was_on = was_on * is_on
 
+        print(importance_reweighting_iter)
+
     # get recon loss:
     recon_losses = -Normal(recon_means, recon_vars.sqrt()).log_prob(image)
     recon_losses = recon_losses.view(image.size(0), -1).sum(1)
 
     neg_elbo = recon_losses + kl_as + kl_zs
 
-    # print(neg_elbo.shape)
-    # print(log_qs.shape)
-    # print(importance_reweighting_iter.shape)
+    print(neg_elbo.shape)
+    print(log_qs.shape)
+    print(importance_reweighting_iter.shape)
+
 
     ps_loss = ((neg_elbo.detach() * log_qs + neg_elbo) * importance_reweighting_iter.detach()).sum()
 
     # map_locations = torch.argmax(log_q.detach(), dim = 1)
     # map_cond_losses = f_z(map_locations).mean()
 
-    return ps_loss, neg_elbo.detach().mean()
+    return ps_loss, neg_elbo.detach().mean(), recon_means
 
 ### This is copied over from galaxy experiments lib
 ### probably a better way to wrap this to not replicate code
@@ -207,7 +212,7 @@ def train_epoch(vae, loader,
         if train:
             optimizer.zero_grad()
 
-        pm_loss, loss = get_importance_sampled_galaxy_loss(vae, image, background,
+        pm_loss, loss, _ = get_importance_sampled_galaxy_loss(vae, image, background,
                                             use_importance_sample = use_importance_sample,
                                             use_baseline = use_baseline,
                                             max_detections = max_detections)
