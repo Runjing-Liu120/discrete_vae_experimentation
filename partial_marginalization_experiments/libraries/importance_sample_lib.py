@@ -100,7 +100,7 @@ def get_importance_weights(image_batch, attn_offset, prob_off):
     image_batch_reshaped = image_batch_cropped.view(batch_size, -1)
     image_batch_normalized = image_batch_reshaped \
                 / image_batch_reshaped.sum(dim = 1, keepdim = True)
-    # image_batch_normalized  = softmax(image_batch_reshaped * 0.005)
+    image_batch_normalized  = softmax(image_batch_reshaped * 0.0025)
 
     importance_weights = image_batch_normalized * (1 - prob_off)
     importance_weight_off = torch.ones((batch_size, 1)).to(device) * prob_off
