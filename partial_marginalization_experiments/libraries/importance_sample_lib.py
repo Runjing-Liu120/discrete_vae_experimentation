@@ -135,7 +135,7 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
             importance_weights = class_weights.detach()
 
         # sample from importance weights
-        a_sample = common_utils.sample_class_weights(importance_weights).detach()
+        a_sample = common_utils.sample_class_weights(importance_weights.detach())
         a_sample[was_on == 0.] = importance_weights.shape[-1] - 1
 
         # reweight accordingly
@@ -176,7 +176,7 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
     # print(log_qs.shape)
     # print(importance_reweighting_iter.shape)
 
-    ps_loss = ((neg_elbo.detach() * log_qs + neg_elbo) * importance_reweighting_iter).sum()
+    ps_loss = ((neg_elbo.detach() * log_qs + neg_elbo) * importance_reweighting_iter.detach()).sum()
 
     # map_locations = torch.argmax(log_q.detach(), dim = 1)
     # map_cond_losses = f_z(map_locations).mean()
@@ -241,7 +241,26 @@ def train_module(vae, train_loader, test_loader, epochs,
 
     test_losses_array = []
     batch_losses_array = np.zeros(epochs)
-    for epoch in range(0, epochs):
+
+    batch_loss_init = train_epoch(vae, train_loader,
+                            use_baseline = use_baseline,
+                            use_importance_sample = use_importance_sample,
+                            max_detections = max_detections,
+                            train = False,
+                            optimizer = optimizer)
+    print('init batch loss: {:.0f} '.format(batch_loss_init))
+    batch_losses_array[0] = batch_loss_init.detach().cpu().numpy()
+
+    test_loss_init = train_epoch(vae, test_loader,
+                            use_baseline = False,
+                            use_importance_sample = False,
+                            max_detections = max_detections,
+                            train = False,
+                            optimizer = None)
+    print('  * init test loss: {:.0f}'.format(test_loss_init))
+    test_losses_array.append(test_loss_init.detach())
+
+    for epoch in range(1, epochs):
         np.random.seed(seed + epoch)
         start_time = timeit.default_timer()
         batch_loss = train_epoch(vae, train_loader,
