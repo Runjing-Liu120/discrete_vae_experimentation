@@ -100,12 +100,43 @@ def get_importance_weights(image_batch, attn_offset, prob_off):
     image_batch_reshaped = image_batch_cropped.view(batch_size, -1)
     image_batch_normalized = image_batch_reshaped \
                 / image_batch_reshaped.sum(dim = 1, keepdim = True)
-    image_batch_normalized  = softmax(image_batch_reshaped * 0.0025)
+    # image_batch_normalized  = softmax(image_batch_reshaped * 0.0025)
 
     importance_weights = image_batch_normalized * (1 - prob_off)
     importance_weight_off = torch.ones((batch_size, 1)).to(device) * prob_off
 
     return torch.cat((importance_weights, importance_weight_off), 1)
+
+def forward_importance_sampled(galaxy_vae, resid_image, recon_vars, was_on,
+                                seq_tensor, use_importance_sample = True):
+
+    assert len(was_on) == len(seq_tensor)
+    assert resid_image.shape[0] == len(seq_tensor)
+    assert recon_vars.shape[0] == len(seq_tensor)
+
+    # get class weights
+    class_weights = galaxy_vae.get_pixel_probs(resid_image, recon_vars)
+    assert_diff(class_weights.sum(1), torch.Tensor([1.0]).to(device), tol = 1e-4)
+
+    # get importance sampling weights
+    if use_importance_sample:
+        attn_offset = galaxy_vae.attn_offset
+        prob_off = class_weights.detach()[:, -1].view(-1, 1)
+        importance_weights = \
+            get_importance_weights(resid_image.detach(), attn_offset, prob_off)
+    else:
+        importance_weights = class_weights.detach()
+
+    # sample from importance weights
+    a_sample = common_utils.sample_class_weights(importance_weights.detach())
+    a_sample[was_on == 0.] = importance_weights.shape[-1] - 1
+
+    recon_mean, recon_var, is_on, kl_z = \
+        galaxy_vae.sample_conditional_a(\
+            resid_image, recon_vars, a_sample)
+
+    return recon_mean, recon_var, is_on, kl_z, importance_weights, \
+                class_weights, a_sample
 
 def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
                                     use_importance_sample = True,
@@ -127,53 +158,36 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
 
     for i in range(max_detections):
         resid_image = image - recon_means
-        class_weights = galaxy_vae.get_pixel_probs(resid_image, recon_vars)
-        assert_diff(class_weights.sum(1), torch.Tensor([1.0]).to(device), tol = 1e-4)
 
-        # get importance sampling weights
-        if use_importance_sample:
-            attn_offset = galaxy_vae.attn_offset
-            prob_off = class_weights.detach()[:, -1].view(-1, 1)
-            importance_weights = \
-                get_importance_weights(resid_image.detach(), attn_offset, prob_off)
-        else:
-            importance_weights = class_weights.detach()
+        # forward
+        recon_mean, recon_var, is_on, kl_z, importance_weights, \
+                    class_weights, a_sample = \
+            forward_importance_sampled(galaxy_vae, resid_image, recon_vars, was_on,
+                                        seq_tensor,
+                                        use_importance_sample = use_importance_sample)
 
-        # sample from importance weights
-        a_sample = common_utils.sample_class_weights(importance_weights.detach())
-        a_sample[was_on == 0.] = importance_weights.shape[-1] - 1
-
-        # reweight accordingly
-        # print('class weights: ', class_weights.detach()[seq_tensor, a_sample])
-        # print('imp weights: ', importance_weights[seq_tensor, a_sample])
-        importance_reweighting_iter = importance_reweighting_iter * \
-                                    class_weights.detach()[seq_tensor, a_sample] / \
+        # update importance sample reweighting
+        importance_reweighting = class_weights.detach()[seq_tensor, a_sample] / \
                                     importance_weights[seq_tensor, a_sample]
-        # print('importance_reweighting_iter', importance_reweighting_iter)
-        # get reconstructions
-        recon_mean, recon_var, is_on, kl_z = \
-            galaxy_vae.sample_conditional_a(\
-                resid_image, recon_means, recon_vars, a_sample)
+        importance_reweighting_iter = importance_reweighting_iter * \
+                                        importance_reweighting
 
+        # update kls
         kl_zs = kl_zs + kl_z
-
-        recon_means = recon_means + recon_mean
-        recon_vars = recon_vars + recon_var
-
-        # kl term
-        # kl_as += (class_weights * log_q).sum() * is_on
-
         class_weights_sampled = class_weights[seq_tensor, a_sample]
         log_class_weights_sampled = torch.log(class_weights_sampled)
         kl_as = kl_as + \
             class_weights_sampled * torch.log(class_weights_sampled) * was_on
 
+        # update reconstructions
+        recon_means = recon_means + recon_mean
+        recon_vars = recon_vars + recon_var
 
+        # update log_q
         log_qs = log_qs + log_class_weights_sampled * was_on
 
+        # update on/off switch
         was_on = was_on * is_on
-
-        # print(importance_reweighting_iter)
 
     # get recon loss:
     recon_losses = -Normal(recon_means, recon_vars.sqrt()).log_prob(image)
@@ -181,15 +195,7 @@ def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
 
     neg_elbo = recon_losses + kl_as + kl_zs
 
-    # print(neg_elbo.shape)
-    # print(log_qs.shape)
-    # print(importance_reweighting_iter.shape)
-
-
     ps_loss = ((neg_elbo.detach() * log_qs + neg_elbo) * importance_reweighting_iter.detach()).sum()
-
-    # map_locations = torch.argmax(log_q.detach(), dim = 1)
-    # map_cond_losses = f_z(map_locations).mean()
 
     return ps_loss, neg_elbo.detach().mean(), recon_means
 
