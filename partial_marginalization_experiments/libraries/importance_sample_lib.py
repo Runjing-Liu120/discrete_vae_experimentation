@@ -260,7 +260,7 @@ def train_epoch(vae, loader,
         if train:
             optimizer.zero_grad()
 
-        pm_loss, loss, _, _ = get_importance_sampled_galaxy_loss(vae, image, background,
+        pm_loss, loss, _ = get_importance_sampled_galaxy_loss(vae, image, background,
                                             use_importance_sample = use_importance_sample,
                                             use_baseline = use_baseline,
                                             max_detections = max_detections)
