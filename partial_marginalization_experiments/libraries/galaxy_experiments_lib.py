@@ -54,7 +54,7 @@ class CelesteRNN(nn.Module):
         self.attn_offset = self.one_galaxy_vae.attn_enc.attn_offset
         self.n_discrete_latent = (sout - 2 * self.attn_offset)**2
 
-        self.always_on = True
+        self.always_on = False
 
     def get_pixel_probs(self, resid_image, var_so_far):
         pixel_probs = self.one_galaxy_vae.attn_enc(resid_image, var_so_far)
