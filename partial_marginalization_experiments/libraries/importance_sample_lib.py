@@ -140,7 +140,8 @@ def forward_importance_sampled(galaxy_vae, resid_image, recon_vars, was_on,
 
 def forward_multiple_detections(galaxy_vae, image, background,
                                     use_importance_sample = True,
-                                    max_detections = 1):
+                                    max_detections = 1,
+                                    return_history = False):
     recon_means = background
     recon_vars = background
 
@@ -149,6 +150,12 @@ def forward_multiple_detections(galaxy_vae, image, background,
     log_qs = 0.
 
     was_on = torch.ones(image.shape[0]).to(device)
+    was_on_history = torch.zeros((image.shape[0], max_detections))
+    recon_mean_history = torch.zeros((image.shape[0],
+                                        image.shape[1],
+                                        image.shape[2],
+                                        image.shape[3],
+                                        max_detections))
 
     importance_reweighting_iter = 1.
 
@@ -186,6 +193,9 @@ def forward_multiple_detections(galaxy_vae, image, background,
 
         # update on/off switch
         was_on = was_on * is_on
+        if return_history:
+            recon_mean_history[:, :, :, :, i] = recon_mean
+            was_on_history[:, i] = was_on
 
     # get recon loss:
     recon_losses = -Normal(recon_means, recon_vars.sqrt()).log_prob(image)
@@ -193,7 +203,12 @@ def forward_multiple_detections(galaxy_vae, image, background,
 
     neg_elbo = recon_losses + kl_as + kl_zs
 
-    return neg_elbo, recon_means, log_qs, importance_reweighting_iter
+    if return_history:
+        return neg_elbo, recon_means, log_qs, importance_reweighting_iter, \
+                recon_mean_history, was_on_history
+    else:
+        return neg_elbo, recon_means, log_qs, importance_reweighting_iter
+
 
 
 def get_importance_sampled_galaxy_loss(galaxy_vae, image, background,
@@ -245,7 +260,7 @@ def train_epoch(vae, loader,
         if train:
             optimizer.zero_grad()
 
-        pm_loss, loss, _ = get_importance_sampled_galaxy_loss(vae, image, background,
+        pm_loss, loss, _, _ = get_importance_sampled_galaxy_loss(vae, image, background,
                                             use_importance_sample = use_importance_sample,
                                             use_baseline = use_baseline,
                                             max_detections = max_detections)
