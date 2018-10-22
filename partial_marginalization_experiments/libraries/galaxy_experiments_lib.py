@@ -54,7 +54,7 @@ class CelesteRNN(nn.Module):
         self.attn_offset = self.one_galaxy_vae.attn_enc.attn_offset
         self.n_discrete_latent = (sout - 2 * self.attn_offset)**2
 
-        self.always_on = True
+        self.always_on = False
 
     def get_pixel_probs(self, resid_image, var_so_far):
         pixel_probs = self.one_galaxy_vae.attn_enc(resid_image, var_so_far)
@@ -71,8 +71,7 @@ class CelesteRNN(nn.Module):
 
         return pixel_probs
 
-    def get_loss_conditional_a(self, resid_image, image_so_far, var_so_far, pixel_1d):
-        image = image_so_far + resid_image
+    def sample_conditional_a(self, resid_image, var_so_far, pixel_1d):
 
         is_on = (pixel_1d < (self.n_discrete_latent - 1)).float()
 
@@ -93,17 +92,29 @@ class CelesteRNN(nn.Module):
         # run through decoder
         recon_mean, recon_var = self.one_galaxy_vae.dec(is_on, pixel_2d, z_sample)
 
-        # get recon loss:
         # NOTE: we will have to the recon means once we do more detections
+        # recon_means = recon_mean + image_so_far
+        # recon_vars = recon_var + var_so_far
+
+        return recon_mean, recon_var, is_on, kl_z
+
+    def get_loss_conditional_a(self, resid_image, image_so_far, var_so_far, pixel_1d):
+
+        image = image_so_far + resid_image
+
+        recon_mean, recon_var, is_on, kl_z = \
+            self.sample_conditional_a(resid_image, image_so_far, var_so_far, pixel_1d)
+
         recon_means = recon_mean + image_so_far
         recon_vars = recon_var + var_so_far
+
         recon_losses = -Normal(recon_means, recon_vars.sqrt()).log_prob(image)
 
         recon_losses = recon_losses.view(image.size(0), -1).sum(1)
 
         conditional_loss = recon_losses + kl_z
 
-        return conditional_loss, recon_means, recon_vars
+        return conditional_loss, recon_means, recon_vars, is_on
 
     def get_pm_loss(self, image, image_so_far, var_so_far,
                             alpha = 0.0,
