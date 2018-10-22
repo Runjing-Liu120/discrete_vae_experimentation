@@ -191,7 +191,7 @@ class HandwritingVAE(nn.Module):
     def encoder_forward(self, image, one_hot_z):
         assert one_hot_z.shape[0] == image.shape[0]
         assert one_hot_z.shape[1] == self.n_classes
-
+	
         latent_means, latent_std = self.encoder(image, one_hot_z)
 
         latent_samples = torch.randn(latent_means.shape).to(device) * latent_std + latent_means
@@ -282,7 +282,7 @@ class HandwritingVAE(nn.Module):
     #     return self.get_conditional_loss(image, true_class_labels)
 
     def get_class_label_cross_entropy(self, log_class_weights, labels):
-        assert np.all(log_class_weights.detach().cpu().numpy() < 0)
+        assert np.all(log_class_weights.detach().cpu().numpy() <= 0)
         assert log_class_weights.shape[0] == len(labels)
         assert log_class_weights.shape[1] == self.n_classes
 
@@ -395,7 +395,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
 
     else:
         optimizer = optim.Adam([
-                {'params': vae.classifier.parameters(), 'lr': lr},
+                {'params': vae.classifier.parameters(), 'lr': lr * 1e-2},
                 {'params': vae.encoder.parameters(), 'lr': lr},
                 {'params': vae.decoder.parameters(), 'lr': lr}],
                 weight_decay=weight_decay)

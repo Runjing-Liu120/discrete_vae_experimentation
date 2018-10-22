@@ -138,7 +138,7 @@ latent_dim = args.latent_dim
 n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
                             n_classes = n_classes,
-                            slen = slen, use_baseline = args.use_baseline)
+                            slen = slen)
 vae.to(device)
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)
@@ -166,8 +166,8 @@ outfile = os.path.join(args.outdir, args.outfilename)
 mnist_vae_lib.train_semisupervised_model(vae,
                     train_loader_unlabeled = train_loader_unlabeled,
                     test_loader = test_loader,
-                    labeled_images = data_labeled['image'],
-                    labels = data_labeled['label'],
+                    labeled_images = data_labeled['image'].to(device),
+                    labels = data_labeled['label'].to(device),
                     n_epoch = args.epochs,
                     alpha = args.alpha,
                     outfile = outfile,

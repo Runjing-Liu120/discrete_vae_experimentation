@@ -57,7 +57,7 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
                                 use_term_one_baseline = True):
 
     # class weights from the variational distribution
-    assert np.all(log_q.detach().cpu().numpy() < 0)
+    assert np.all(log_q.detach().cpu().numpy() <= 0)
     class_weights = torch.exp(log_q.detach())
     # assert np.all(np.abs(class_weights.cpu().sum(1).numpy() - 1.0) < 1e-6), \
     #             np.max(np.abs(class_weights.cpu().sum(1).numpy() - 1.0))
