@@ -32,7 +32,6 @@ parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
 
 parser.add_argument('--weight_decay', type = float, default = 1e-6)
-parser.add_argument('--dropout', type = float, default = 0.5)
 parser.add_argument('--learning_rate', type = float, default = 0.001)
 
 parser.add_argument('--propn_labeled', type = float, default = 0.1,
@@ -41,9 +40,9 @@ parser.add_argument('--propn_labeled', type = float, default = 0.1,
 parser.add_argument('--alpha', type = float, default = 1.0,
                     help = 'weight of cross_entropy_term')
 
-parser.add_argument('--num_reinforced', type=int, default=0,
+parser.add_argument('--topk', type=int, default=0,
                     help='number of weights to sample for reinforce')
-parser.add_argument('--use_baseline', type=distutils.util.strtobool, default='False',
+parser.add_argument('--use_baseline', type=distutils.util.strtobool, default='True',
                     help='whether or not to add a use_baseline')
 
 # saving encoder
@@ -163,6 +162,7 @@ print('training vae')
 t0_train = time.time()
 
 outfile = os.path.join(args.outdir, args.outfilename)
+
 mnist_vae_lib.train_semisupervised_model(vae,
                     train_loader_unlabeled = train_loader_unlabeled,
                     test_loader = test_loader,
@@ -174,7 +174,8 @@ mnist_vae_lib.train_semisupervised_model(vae,
                     save_every = args.save_every,
                     weight_decay = args.weight_decay,
                     lr = args.learning_rate,
-                    num_reinforced = args.num_reinforced,
+                    topk = args.topk,
+                    use_baseline = args.use_baseline,
                     train_classifier_only = args.train_classifier_only)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))

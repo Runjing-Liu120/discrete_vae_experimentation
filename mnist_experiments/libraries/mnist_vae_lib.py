@@ -264,9 +264,11 @@ class HandwritingVAE(nn.Module):
                                     use_baseline = use_baseline,
                                     use_term_one_baseline = True)
 
+        # print(pm_loss_z)
+
         # kl term for class weights
         # (assuming uniform prior)
-        kl_q_z = -torch.exp(log_q) * log_q
+        kl_q_z = (-torch.exp(log_q) * log_q).sum()
 
         # sampled loss:
         map_weights = torch.argmax(log_q, dim = 1)
@@ -280,8 +282,10 @@ class HandwritingVAE(nn.Module):
     #     return self.get_conditional_loss(image, true_class_labels)
 
     def get_class_label_cross_entropy(self, log_class_weights, labels):
-        assert np.all(log_class_weights.detach().cpy().numpy() < 0)
-        
+        assert np.all(log_class_weights.detach().cpu().numpy() < 0)
+        assert log_class_weights.shape[0] == len(labels)
+        assert log_class_weights.shape[1] == self.n_classes
+
         return torch.sum(
             -log_class_weights * \
             mnist_utils.get_one_hot_encoding_from_int(labels, self.n_classes))
