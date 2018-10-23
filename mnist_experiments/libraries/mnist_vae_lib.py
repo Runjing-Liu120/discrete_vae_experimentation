@@ -309,7 +309,7 @@ class HandwritingVAE(nn.Module):
         # unlabeled loss
         unlabeled_pm_loss, unlabeled_map_loss = \
             self.get_unlabeled_pm_loss(unlabeled_images,
-                                        topk = topk,
+                                        topk = topk, 
                                         use_baseline = use_baseline,
                                         true_labels = true_labels)
 
@@ -359,7 +359,7 @@ class HandwritingVAE(nn.Module):
                 self.get_semisupervised_loss(unlabeled_images,
                                                 labeled_images, labels,
                                                 use_baseline = use_baseline,
-                                                alpha = 1.0, topk = topk,
+                                                alpha = alpha, topk = topk,
                                                 true_labels = true_labels)
 
             if train:
