@@ -363,8 +363,7 @@ class HandwritingVAE(nn.Module):
                 true_labels = None
 
             if optimizer is not None:
-                foo = 1
-                # optimizer.zero_grad()
+                optimizer.zero_grad()
 
             batch_size = unlabeled_images.size()[0]
 
@@ -467,12 +466,12 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                 vae.eval_vae(train_loader_unlabeled,
                                 labeled_images = labeled_images,
                                 labels = labels,
-                                optimizer = scheduler,
+                                optimizer = optimizer, 
                                 train = True,
                                 use_baseline = use_baseline,
                                 alpha = alpha,
                                 topk = topk,
-                                use_true_labels = use_true_labels)
+                                use_true_labels = use_true_labels); scheduler.step()
 
         elapsed = timeit.default_timer() - start_time
         print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
