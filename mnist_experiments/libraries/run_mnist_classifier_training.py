@@ -5,6 +5,8 @@ import os
 import torch
 print('torch version', torch.__version__)
 
+import torch.optim as optim
+
 import time
 import json
 
@@ -82,12 +84,12 @@ train_loader_labeled = torch.utils.data.DataLoader(
 
 train_loader_unlabeled = torch.utils.data.DataLoader(
                  dataset=train_set_unlabeled,
-                 batch_size=args.batch_size,
+                 batch_size=64,
                  shuffle=True)
 
 test_loader = torch.utils.data.DataLoader(
                 dataset=test_set,
-                batch_size=args.batch_size,
+                batch_size=64,
                 shuffle=False)
 
 for batch_idx, d in enumerate(train_loader_labeled):
@@ -103,7 +105,7 @@ print('num_test: ', test_set.num_images)
 
 # SET UP VAE
 slen = train_set_unlabeled[0]['image'].shape[0]
-latent_dim = args.latent_dim
+latent_dim = 5 # args.latent_dim
 n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
                             n_classes = n_classes,
@@ -125,7 +127,7 @@ def train_classifier(vae, images, labels, optimizer):
     images = images.to(device)
     labels = labels.to(device)
 
-    for i in range(arg.epochs):
+    for i in range(args.epochs):
         optimizer.zero_grad()
 
         log_q = vae.classifier(images)
@@ -139,15 +141,15 @@ def train_classifier(vae, images, labels, optimizer):
         # get classification accuracy:
         z_ind = torch.argmax(log_q.detach(), dim = 1)
 
-        print('classification accuracy: ', torch.mean(z_ind == label).float())\
+        print('classification accuracy: ', torch.mean((z_ind == labels).float()))\
 
 optimizer = optim.Adam([
-        {'params': vae.classifier.parameters(), 'lr': lr}],
-        weight_decay=weight_decay)
+        {'params': vae.classifier.parameters(), 'lr': args.learning_rate}],
+        weight_decay=args.weight_decay)
 
 train_classifier(vae, data_labeled['image'], data_labeled['label'], optimizer)
 
-outfile_final = args.outdir + args.outfile + '_classifier_final'
+outfile_final = args.outdir + args.outfilename + '_classifier_final'
 print("writing the classifier parameters to " + outfile_final + '\n')
 torch.save(vae.classifier.state_dict(), outfile_final)
 
