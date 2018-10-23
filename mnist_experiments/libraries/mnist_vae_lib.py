@@ -313,15 +313,16 @@ class HandwritingVAE(nn.Module):
             mnist_utils.get_one_hot_encoding_from_int(labels, self.n_classes))
 
     def get_semisupervised_loss(self, unlabeled_images,
-                                    labeled_images, labels,
+                                    labeled_images, labels, num_train_unlabeled,
                                     use_baseline = True,
                                     alpha = 1.0, topk = 0,
                                     true_labels = None):
 
         # unlabeled loss
+        batch_size = unlabeled_images.shape[0]
         unlabeled_pm_loss, unlabeled_map_loss = \
             self.get_unlabeled_pm_loss(unlabeled_images,
-                                        topk = topk, 
+                                        topk = topk,
                                         use_baseline = use_baseline,
                                         true_labels = true_labels)
 
@@ -333,7 +334,9 @@ class HandwritingVAE(nn.Module):
         cross_entropy_term = \
             self.get_class_label_cross_entropy(log_q_labeled, labels)
 
-        return unlabeled_pm_loss.sum(), unlabeled_map_loss # +  labeled_loss.sum() + alpha * cross_entropy_term.sum(), unlabeled_map_loss
+        return unlabeled_pm_loss.sum()  * (num_train_unlabeled / batch_size) +  \
+                    labeled_loss.sum() + alpha * cross_entropy_term.sum(), \
+                    unlabeled_map_loss
 
     def eval_vae(self, train_loader, labeled_images, labels, \
                         optimizer = None,
@@ -368,7 +371,7 @@ class HandwritingVAE(nn.Module):
 
             loss, unlabeled_map_loss = \
                 self.get_semisupervised_loss(unlabeled_images,
-                                                labeled_images, labels,
+                                                labeled_images, labels, num_images, 
                                                 use_baseline = use_baseline,
                                                 alpha = alpha, topk = topk,
                                                 true_labels = true_labels)
@@ -440,8 +443,11 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     test_class_accuracy_array = []
 
     # get losses
-    train_loss = vae.eval_vae(train_loader_unlabeled, labeled_images, labels, use_baseline = False)
-    test_loss = vae.eval_vae(test_loader, labeled_images, labels, use_baseline = False)
+    train_loss = vae.eval_vae(train_loader_unlabeled, labeled_images, labels,
+                                use_baseline = False, use_true_labels = use_true_labels)
+    test_loss = vae.eval_vae(test_loader, labeled_images, labels,
+                                use_baseline = False, use_true_labels = use_true_labels)
+
     print('  * init train recon loss: {:.10g};'.format(train_loss))
     print('  * init test recon loss: {:.10g};'.format(test_loss))
 
@@ -465,7 +471,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                 vae.eval_vae(train_loader_unlabeled,
                                 labeled_images = labeled_images,
                                 labels = labels,
-                                optimizer = optimizer, 
+                                optimizer = optimizer,
                                 train = True,
                                 use_baseline = use_baseline,
                                 alpha = alpha,
@@ -477,8 +483,10 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                     epoch, unlabeled_loss, elapsed))
 
         if epoch % print_every == 0:
-            train_loss = vae.eval_vae(train_loader_unlabeled, labeled_images, labels, use_baseline = False)
-            test_loss = vae.eval_vae(test_loader, labeled_images, labels, use_baseline = False)
+            train_loss = vae.eval_vae(train_loader_unlabeled, labeled_images, labels,
+                                        use_baseline = False, use_true_labels = use_true_labels)
+            test_loss = vae.eval_vae(test_loader, labeled_images, labels,
+                                        use_baseline = False, use_true_labels = use_true_labels)
 
             print('  * train recon loss: {:.10g};'.format(train_loss))
             print('  * test recon loss: {:.10g};'.format(test_loss))
