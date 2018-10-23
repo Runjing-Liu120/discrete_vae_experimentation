@@ -37,10 +37,16 @@ class MLPEncoder(nn.Module):
         self.n_classes = n_classes
 
         # define the linear layers
-        self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 256) # 128 hidden nodes; two more layers
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 128)
-        self.fc4 = nn.Linear(128, latent_dim * 2)
+        # self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 256) # 128 hidden nodes; two more layers
+        # self.fc2 = nn.Linear(256, 256)
+        # self.fc3 = nn.Linear(256, 128)
+        # self.fc4 = nn.Linear(128, latent_dim * 2)
+
+        self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 512) # 128 hidden nodes; two more layers
+        self.fc2 = nn.Linear(512, 512)
+        self.fc3 = nn.Linear(512, 256)
+        self.fc4 = nn.Linear(256, latent_dim * 2)
+
 
     def forward(self, image, z):
 
@@ -136,10 +142,10 @@ class MLPConditionalDecoder(nn.Module):
         self.n_classes = n_classes
         self.slen = slen
 
-        self.fc1 = nn.Linear(latent_dim + n_classes, 128)
-        self.fc2 = nn.Linear(128, 256)
-        self.fc3 = nn.Linear(256, 256)
-        self.fc4 = nn.Linear(256, self.n_pixels)
+        self.fc1 = nn.Linear(latent_dim + n_classes, 256)
+        self.fc2 = nn.Linear(256, 512)
+        self.fc3 = nn.Linear(512, 512)
+        self.fc4 = nn.Linear(512, self.n_pixels)
 
         self.sigmoid = nn.Sigmoid()
 
@@ -555,12 +561,18 @@ def get_classification_accuracy(loader, classifier,
 
     return accuracy / n_images, wrong_images, wrong_labels
 
-def get_reconstructions(vae, image):
-    class_weights = vae.classifier(image)
+def get_reconstructions(vae, image, labels = None):
 
-    z_ind = torch.argmax(class_weights, dim = 1)
-    z_ind_one_hot = \
-        mnist_utils.get_one_hot_encoding_from_int(z_ind, vae.n_classes)
+    if labels is None:
+        class_weights = vae.classifier(image)
+
+        z_ind = torch.argmax(class_weights, dim = 1)
+        z_ind_one_hot = \
+            mnist_utils.get_one_hot_encoding_from_int(z_ind, vae.n_classes)
+    else:
+        z_ind = labels
+        z_ind_one_hot = \
+            mnist_utils.get_one_hot_encoding_from_int(labels, vae.n_classes)
 
     latent_means, latent_std, latent_samples = \
         vae.encoder_forward(image, z_ind_one_hot)
