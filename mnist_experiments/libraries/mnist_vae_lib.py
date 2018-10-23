@@ -17,6 +17,8 @@ sys.path.insert(0, '../../partial_marginalization_experiments/libraries/')
 import partial_marginalization_lib as pm_lib
 import common_utils as pm_common_utils
 
+from torch.optim import lr_scheduler
+
 from copy import deepcopy
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -361,7 +363,8 @@ class HandwritingVAE(nn.Module):
                 true_labels = None
 
             if optimizer is not None:
-                optimizer.zero_grad()
+                foo = 1
+                # optimizer.zero_grad()
 
             batch_size = unlabeled_images.size()[0]
 
@@ -430,6 +433,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                 {'params': vae.decoder.parameters(), 'lr': lr}],
                 weight_decay=weight_decay)
 
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
+
     iter_array = []
     train_loss_array = []
     test_loss_array = []
@@ -462,7 +467,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                 vae.eval_vae(train_loader_unlabeled,
                                 labeled_images = labeled_images,
                                 labels = labels,
-                                optimizer = optimizer,
+                                optimizer = scheduler,
                                 train = True,
                                 use_baseline = use_baseline,
                                 alpha = alpha,
