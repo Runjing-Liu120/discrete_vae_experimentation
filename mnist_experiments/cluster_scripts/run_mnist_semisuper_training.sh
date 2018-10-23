@@ -1,7 +1,7 @@
 #!/bin/bash
 
 python ../libraries/run_mnist_semisupervised_training.py \
-			--epochs 30 \
+			--epochs 50 \
 			--save_every 10 \
 			--batch_size 64 \
 			--seed 901 \
