@@ -333,8 +333,7 @@ class HandwritingVAE(nn.Module):
         cross_entropy_term = \
             self.get_class_label_cross_entropy(log_q_labeled, labels)
 
-        return unlabeled_pm_loss.sum() + labeled_loss.sum() + \
-                    alpha * cross_entropy_term.sum(), unlabeled_map_loss
+        return unlabeled_pm_loss.sum(), unlabeled_map_loss # +  labeled_loss.sum() + alpha * cross_entropy_term.sum(), unlabeled_map_loss
 
     def eval_vae(self, train_loader, labeled_images, labels, \
                         optimizer = None,
@@ -432,7 +431,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                 {'params': vae.decoder.parameters(), 'lr': lr}],
                 weight_decay=weight_decay)
 
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
+        # scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
 
     iter_array = []
     train_loss_array = []
@@ -471,7 +470,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                                 use_baseline = use_baseline,
                                 alpha = alpha,
                                 topk = topk,
-                                use_true_labels = use_true_labels); scheduler.step()
+                                use_true_labels = use_true_labels); #scheduler.step()
 
         elapsed = timeit.default_timer() - start_time
         print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
