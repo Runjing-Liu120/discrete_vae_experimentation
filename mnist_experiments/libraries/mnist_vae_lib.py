@@ -280,11 +280,9 @@ class HandwritingVAE(nn.Module):
                                     use_baseline = use_baseline,
                                     use_term_one_baseline = True)
 
-        # print(pm_loss_z)
-
         # kl term for class weights
         # (assuming uniform prior)
-        kl_q_z = (-torch.exp(log_q) * log_q).sum()
+        kl_q_z = (torch.exp(log_q) * log_q).sum()
 
         # sampled loss:
         map_weights = torch.argmax(log_q, dim = 1)
