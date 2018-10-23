@@ -371,7 +371,7 @@ class HandwritingVAE(nn.Module):
 
             loss, unlabeled_map_loss = \
                 self.get_semisupervised_loss(unlabeled_images,
-                                                labeled_images, labels, num_images, 
+                                                labeled_images, labels, num_images,
                                                 use_baseline = use_baseline,
                                                 alpha = alpha, topk = topk,
                                                 true_labels = true_labels)
@@ -464,6 +464,9 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     train_class_accuracy_array.append(train_class_accuracy.detach().cpu().numpy())
     test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
 
+    unlabeled_batch_losses = []
+    unlabeled_batch_losses.append(train_loss.detach().cpu().numpy())
+
     for epoch in range(1, n_epoch + 1):
         start_time = timeit.default_timer()
 
@@ -481,6 +484,9 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         elapsed = timeit.default_timer() - start_time
         print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
                     epoch, unlabeled_loss, elapsed))
+
+        unlabeled_batch_losses.append(unlabeled_loss.detach().cpu().numpy())
+        np.savetxt(outfile + 'batch_loss_array.txt', unlabeled_batch_losses)
 
         if epoch % print_every == 0:
             train_loss = vae.eval_vae(train_loader_unlabeled, labeled_images, labels,
