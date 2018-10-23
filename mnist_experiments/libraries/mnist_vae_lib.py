@@ -191,7 +191,7 @@ class HandwritingVAE(nn.Module):
     def encoder_forward(self, image, one_hot_z):
         assert one_hot_z.shape[0] == image.shape[0]
         assert one_hot_z.shape[1] == self.n_classes
-	
+
         latent_means, latent_std = self.encoder(image, one_hot_z)
 
         latent_samples = torch.randn(latent_means.shape).to(device) * latent_std + latent_means
@@ -252,9 +252,19 @@ class HandwritingVAE(nn.Module):
 
         return -loglik_z + kl_q_latent
 
-    def get_unlabeled_pm_loss(self, image, topk = 0, use_baseline = True):
+    def get_unlabeled_pm_loss(self, image, topk = 0, use_baseline = True,
+                                    true_labels = None):
 
-        log_q = self.classifier(image)
+        # true labels for debugging only:
+        if true_labels is None:
+            log_q = self.classifier(image)
+        else:
+            # print('using true labels')
+            batch_size = image.shape[0]
+            q = torch.zeros((batch_size, self.n_classes)) + 1e-12
+            seq_tensor = torch.LongTensor([i for i in range(batch_size)])
+            q[seq_tensor, true_labels] = 1 - 1e-12 * (self.n_classes - 1)
+            log_q = torch.log(q).to(device)
 
         f_z = lambda z : self.get_conditional_loss(image, z)
 
@@ -293,13 +303,15 @@ class HandwritingVAE(nn.Module):
     def get_semisupervised_loss(self, unlabeled_images,
                                     labeled_images, labels,
                                     use_baseline = True,
-                                    alpha = 1.0, topk = 0):
+                                    alpha = 1.0, topk = 0,
+                                    true_labels = None):
 
         # unlabeled loss
         unlabeled_pm_loss, unlabeled_map_loss = \
             self.get_unlabeled_pm_loss(unlabeled_images,
                                         topk = topk,
-                                        use_baseline = use_baseline)
+                                        use_baseline = use_baseline,
+                                        true_labels = true_labels)
 
         # labeled loss
         labeled_loss = self.get_conditional_loss(labeled_images, labels)
@@ -317,7 +329,8 @@ class HandwritingVAE(nn.Module):
                         train = False,
                         use_baseline = True,
                         topk = 0,
-                        alpha = 1.0):
+                        alpha = 1.0,
+                        use_true_labels = False):
         if train:
             self.train()
             assert optimizer is not None
@@ -332,6 +345,11 @@ class HandwritingVAE(nn.Module):
         for batch_idx, data in enumerate(train_loader):
             unlabeled_images = data['image'].to(device)
 
+            if use_true_labels:
+                true_labels = data['label'].to(device)
+            else:
+                true_labels = None
+
             if optimizer is not None:
                 optimizer.zero_grad()
 
@@ -341,7 +359,8 @@ class HandwritingVAE(nn.Module):
                 self.get_semisupervised_loss(unlabeled_images,
                                                 labeled_images, labels,
                                                 use_baseline = use_baseline,
-                                                alpha = 1.0, topk = topk)
+                                                alpha = 1.0, topk = topk,
+                                                true_labels = true_labels)
 
             if train:
                 loss.backward()
@@ -384,7 +403,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                     n_epoch = 200, print_every = 10, save_every = 20,
                     weight_decay = 1e-6, lr = 0.001,
                     save_final_enc = True,
-                    train_classifier_only = False):
+                    train_classifier_only = False,
+                    use_true_labels = False):
 
     # define optimizer
     if train_classifier_only:
@@ -436,7 +456,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                                 train = True,
                                 use_baseline = use_baseline,
                                 alpha = alpha,
-                                topk = topk)
+                                topk = topk,
+                                use_true_labels = use_true_labels)
 
         elapsed = timeit.default_timer() - start_time
         print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\

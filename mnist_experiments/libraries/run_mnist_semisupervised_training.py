@@ -45,6 +45,9 @@ parser.add_argument('--topk', type=int, default=0,
 parser.add_argument('--use_baseline', type=distutils.util.strtobool, default='True',
                     help='whether or not to add a use_baseline')
 
+parser.add_argument('--use_true_labels', type=distutils.util.strtobool, default='True',
+                    help='for debugging only: whether to give the procedure all the labels')
+
 # saving encoder
 parser.add_argument('--outdir', type = str,
                     default='./', help = 'directory for saving encoder and decoder')
@@ -176,6 +179,7 @@ mnist_vae_lib.train_semisupervised_model(vae,
                     lr = args.learning_rate,
                     topk = args.topk,
                     use_baseline = args.use_baseline,
-                    train_classifier_only = args.train_classifier_only)
+                    train_classifier_only = args.train_classifier_only,
+                    use_true_labels = args.use_true_labels)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))
