@@ -255,6 +255,8 @@ class HandwritingVAE(nn.Module):
                                                             latent_std)
 
         assert np.all(np.isfinite(kl_q_latent.detach().cpu().numpy()))
+        # print(loglik_z)
+        # print(kl_q_latent)
 
         return -loglik_z + kl_q_latent
 
@@ -272,13 +274,17 @@ class HandwritingVAE(nn.Module):
             q[seq_tensor, true_labels] = 1 - 1e-12 * (self.n_classes - 1)
             log_q = torch.log(q).to(device)
 
-        f_z = lambda z : self.get_conditional_loss(image, z)
+        if true_labels is None:
+            f_z = lambda z : self.get_conditional_loss(image, z)
 
-        pm_loss_z = pm_lib.get_partial_marginal_loss(f_z, log_q,
-                                    alpha = 0.0,
-                                    topk = topk,
-                                    use_baseline = use_baseline,
-                                    use_term_one_baseline = True)
+            pm_loss_z = pm_lib.get_partial_marginal_loss(f_z, log_q,
+                                        alpha = 0.0,
+                                        topk = topk,
+                                        use_baseline = use_baseline,
+                                        use_term_one_baseline = True)
+        else:
+            pm_loss_z = self.get_conditional_loss(image, \
+                                torch.argmax(log_q, dim = 1).detach())
 
         # kl term for class weights
         # (assuming uniform prior)
