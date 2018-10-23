@@ -141,9 +141,9 @@ def train_classifier(vae, images, labels, optimizer):
         # get classification accuracy:
         z_ind = torch.argmax(log_q.detach(), dim = 1)
 
-        print('accuracy labeled: ', torch.mean((z_ind == labels).float()))
-        print('accuracy unlabeled: ', mnist_vae_lib.eval_classification_accuracy(vae.classifier, train_loader_unlabeled))
-        print('accuracy test: ', mnist_vae_lib.eval_classification_accuracy(vae.classifier, test_loader))
+        print('accuracy labeled: {:.4g};'.format(torch.mean((z_ind == labels).float())))
+        # print('accuracy unlabeled: {:.4g};'.format(mnist_vae_lib.eval_classification_accuracy(vae.classifier, train_loader_unlabeled)))
+        print('accuracy test: {:.4g}; \n \n '.format( mnist_vae_lib.eval_classification_accuracy(vae.classifier, test_loader)))
 
 optimizer = optim.Adam([
         {'params': vae.classifier.parameters(), 'lr': args.learning_rate}],
