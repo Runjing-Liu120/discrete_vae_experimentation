@@ -274,9 +274,9 @@ class HandwritingVAE(nn.Module):
             q[seq_tensor, true_labels] = 1 - 1e-12 * (self.n_classes - 1)
             log_q = torch.log(q).to(device)
 
-        if true_labels is None:
-            f_z = lambda z : self.get_conditional_loss(image, z)
+        f_z = lambda z : self.get_conditional_loss(image, z)
 
+        if true_labels is None:
             pm_loss_z = pm_lib.get_partial_marginal_loss(f_z, log_q,
                                         alpha = 0.0,
                                         topk = topk,
