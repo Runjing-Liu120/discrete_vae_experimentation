@@ -486,7 +486,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
                     epoch, unlabeled_loss, elapsed))
 
         unlabeled_batch_losses.append(unlabeled_loss.detach().cpu().numpy())
-        np.savetxt(outfile + 'batch_loss_array.txt', unlabeled_batch_losses)
+        np.savetxt(outfile + '_batch_loss_array.txt', unlabeled_batch_losses)
 
         if epoch % print_every == 0:
             train_loss = vae.eval_vae(train_loader_unlabeled, labeled_images, labels,
@@ -529,7 +529,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
             loss_array[3, :] = train_class_accuracy_array
             loss_array[4, :] = test_class_accuracy_array
 
-            np.savetxt(outfile + 'loss_array.txt', loss_array)
+            np.savetxt(outfile + '_loss_array.txt', loss_array)
 
 
     if save_final_enc:
