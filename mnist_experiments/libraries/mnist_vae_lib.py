@@ -44,10 +44,10 @@ class MLPEncoder(nn.Module):
         # self.fc3 = nn.Linear(256, 128)
         # self.fc4 = nn.Linear(128, latent_dim * 2)
 
-        self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 128) # 128 hidden nodes; two more layers
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, 128)
-        self.fc4 = nn.Linear(128, latent_dim * 2)
+        self.fc1 = nn.Linear(self.n_pixels + self.n_classes, 256) # 128 hidden nodes; two more layers
+        self.fc2 = nn.Linear(256, 256)
+        # self.fc3 = nn.Linear(128, 128)
+        self.fc4 = nn.Linear(256, latent_dim * 2)
 
 
     def forward(self, image, z):
@@ -58,7 +58,7 @@ class MLPEncoder(nn.Module):
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
-        h = F.relu(self.fc3(h))
+        # h = F.relu(self.fc3(h))
         h = self.fc4(h)
         # h = self.fc4(h)
         # h = self.fc5(h)
@@ -144,10 +144,10 @@ class MLPConditionalDecoder(nn.Module):
         self.n_classes = n_classes
         self.slen = slen
 
-        self.fc1 = nn.Linear(latent_dim + n_classes, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, 128)
-        self.fc4 = nn.Linear(128, self.n_pixels)
+        self.fc1 = nn.Linear(latent_dim + n_classes, 256)
+        self.fc2 = nn.Linear(256, 256)
+        # self.fc3 = nn.Linear(128, 128)
+        self.fc4 = nn.Linear(256, self.n_pixels)
 
         self.sigmoid = nn.Sigmoid()
 
@@ -160,7 +160,7 @@ class MLPConditionalDecoder(nn.Module):
 
         h = F.relu(self.fc1(h))
         h = F.relu(self.fc2(h))
-        h = F.relu(self.fc3(h))
+        # h = F.relu(self.fc3(h))
         h = self.fc4(h)
 
         h = h.view(-1, self.slen, self.slen)
