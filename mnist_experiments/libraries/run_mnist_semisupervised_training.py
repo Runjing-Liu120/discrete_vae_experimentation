@@ -45,7 +45,7 @@ parser.add_argument('--topk', type=int, default=0,
 parser.add_argument('--use_baseline', type=distutils.util.strtobool, default='True',
                     help='whether or not to add a use_baseline')
 
-parser.add_argument('--use_true_labels', type=distutils.util.strtobool, default='True',
+parser.add_argument('--use_true_labels', type=distutils.util.strtobool, default='False',
                     help='for debugging only: whether to give the procedure all the labels')
 
 # saving encoder

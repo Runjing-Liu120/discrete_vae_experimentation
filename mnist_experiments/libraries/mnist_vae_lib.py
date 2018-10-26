@@ -267,7 +267,7 @@ class HandwritingVAE(nn.Module):
 
         # true labels for debugging only:
         if true_labels is None:
-            log_q = self.classifier(image)
+            log_q = self.classifier(image) #; print('max: ', torch.max(log_q)); print('min: ', torch.min(log_q));
 
         else:
             # print('using true labels')
@@ -431,8 +431,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     else:
         optimizer = optim.Adam([
                 {'params': vae.classifier.parameters(), 'lr': lr},
-                {'params': vae.encoder.parameters(), 'lr': lr},
-                {'params': vae.decoder.parameters(), 'lr': lr}],
+                {'params': vae.encoder.parameters(), 'lr': lr * 1e-1},
+                {'params': vae.decoder.parameters(), 'lr': lr * 1e-1}],
                 weight_decay=weight_decay)
 
         # scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
