@@ -5,6 +5,8 @@ import os
 import torch
 print('torch version', torch.__version__)
 
+import torch.optim as optim
+
 import time
 import json
 
@@ -22,31 +24,13 @@ parser = argparse.ArgumentParser(description='FullVAE')
 
 parser.add_argument('--mnist_data_dir', type = str,
                     default='../mnist_data/')
-parser.add_argument('--latent_dim', type=int, default=5, metavar='N',
-                    help='latent dimension (default = 5)')
 
 # Training parameters
 parser.add_argument('--epochs', type=int, default=1000,
                     help='number of epochs to train (default: 1000)')
-parser.add_argument('--batch_size', type=int, default=64, metavar='N',
-                    help='input batch size for training (default: 64)')
 
 parser.add_argument('--weight_decay', type = float, default = 1e-6)
 parser.add_argument('--learning_rate', type = float, default = 0.001)
-
-parser.add_argument('--propn_labeled', type = float, default = 0.1,
-                    help = 'proportion of training data labeled')
-
-parser.add_argument('--alpha', type = float, default = 1.0,
-                    help = 'weight of cross_entropy_term')
-
-parser.add_argument('--topk', type=int, default=0,
-                    help='number of weights to sample for reinforce')
-parser.add_argument('--use_baseline', type=distutils.util.strtobool, default='True',
-                    help='whether or not to add a use_baseline')
-
-parser.add_argument('--use_true_labels', type=distutils.util.strtobool, default='False',
-                    help='for debugging only: whether to give the procedure all the labels')
 
 # saving encoder
 parser.add_argument('--outdir', type = str,
@@ -54,29 +38,19 @@ parser.add_argument('--outdir', type = str,
 parser.add_argument('--outfilename', type = str,
                     default='enc',
                     help = 'filename for saving the encoder and decoder')
-parser.add_argument('--save_every', type = int, default = 50,
-                    help='save encoder ever how ___ epochs (default = 50)')
 
-# Loading encoder
-parser.add_argument('--load_enc', type=distutils.util.strtobool, default='False',
-                    help='whether to load encoder')
-parser.add_argument('--enc_init', type = str,
-                    help = 'file from which to load encoder')
-parser.add_argument('--load_dec', type=distutils.util.strtobool, default='False',
-                    help='whether to load decoder')
-parser.add_argument('--dec_init', type = str,
-                    help = 'file from which to load encoder')
+# inits
 parser.add_argument('--load_classifier', type=distutils.util.strtobool, default='False',
                     help='whether to load classifier')
 parser.add_argument('--classifier_init', type = str,
                     help = 'file from which to load encoder')
-parser.add_argument('--train_classifier_only', type=distutils.util.strtobool, default='False',
-                    help = 'whether to train classifier')
 
 # Whether to just work with subset of data
 parser.add_argument('--propn_sample', type = float,
                     help='proportion of dataset to use',
                     default = 1.0)
+parser.add_argument('--propn_labeled', type = float, default = 0.1,
+                    help = 'proportion of training data labeled')
 
 # Other params
 parser.add_argument('--seed', type=int, default=4254,
@@ -88,12 +62,6 @@ args = parser.parse_args()
 
 def validate_args():
     assert os.path.exists(args.outdir)
-
-    if args.load_enc:
-        assert os.path.isfile(args.enc_init)
-
-    if args.load_dec:
-        assert os.path.isfile(args.dec_init)
 
     if args.load_classifier:
         assert os.path.isfile(args.classifier_init)
@@ -116,12 +84,12 @@ train_loader_labeled = torch.utils.data.DataLoader(
 
 train_loader_unlabeled = torch.utils.data.DataLoader(
                  dataset=train_set_unlabeled,
-                 batch_size=args.batch_size,
+                 batch_size=64,
                  shuffle=True)
 
 test_loader = torch.utils.data.DataLoader(
                 dataset=test_set,
-                batch_size=args.batch_size,
+                batch_size=64,
                 shuffle=False)
 
 for batch_idx, d in enumerate(train_loader_labeled):
@@ -137,28 +105,17 @@ print('num_test: ', test_set.num_images)
 
 # SET UP VAE
 slen = train_set_unlabeled[0]['image'].shape[0]
-latent_dim = args.latent_dim
+latent_dim = 5 # args.latent_dim
 n_classes = 10
 vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
                             n_classes = n_classes,
                             slen = slen)
 vae.to(device)
-if args.load_enc:
-    print('initializing encoder from ', args.enc_init)
-
-    vae.encoder.load_state_dict(torch.load(args.enc_init,
-                                    map_location=lambda storage, loc: storage))
-if args.load_dec:
-    print('initializing decoder from ', args.dec_init)
-
-    vae.decoder.load_state_dict(torch.load(args.dec_init,
-                                    map_location=lambda storage, loc: storage))
 if args.load_classifier:
     print('initializing classifier from ', args.classifier_init)
 
     vae.classifier.load_state_dict(torch.load(args.classifier_init,
                                     map_location=lambda storage, loc: storage))
-
 
 print('training vae')
 
@@ -166,20 +123,36 @@ t0_train = time.time()
 
 outfile = os.path.join(args.outdir, args.outfilename)
 
-mnist_vae_lib.train_semisupervised_model(vae,
-                    train_loader_unlabeled = train_loader_unlabeled,
-                    test_loader = test_loader,
-                    labeled_images = data_labeled['image'].to(device),
-                    labels = data_labeled['label'].to(device),
-                    n_epoch = args.epochs,
-                    alpha = args.alpha,
-                    outfile = outfile,
-                    save_every = args.save_every,
-                    weight_decay = args.weight_decay,
-                    lr = args.learning_rate,
-                    topk = args.topk,
-                    use_baseline = args.use_baseline,
-                    train_classifier_only = args.train_classifier_only,
-                    use_true_labels = args.use_true_labels)
+def train_classifier(vae, images, labels, optimizer):
+    images = images.to(device)
+    labels = labels.to(device)
+
+    for i in range(args.epochs):
+        optimizer.zero_grad()
+
+        log_q = vae.classifier(images)
+
+        cross_entropy = vae.get_class_label_cross_entropy(log_q, labels)
+
+        cross_entropy.backward()
+
+        optimizer.step()
+
+        # get classification accuracy:
+        z_ind = torch.argmax(log_q.detach(), dim = 1)
+
+        print('accuracy labeled: {:.4g};'.format(torch.mean((z_ind == labels).float())))
+        # print('accuracy unlabeled: {:.4g};'.format(mnist_vae_lib.eval_classification_accuracy(vae.classifier, train_loader_unlabeled)))
+        print('accuracy test: {:.4g}; \n \n '.format(mnist_vae_lib.eval_classification_accuracy(vae.classifier, test_loader)))
+
+optimizer = optim.Adam([
+        {'params': vae.classifier.parameters(), 'lr': args.learning_rate}],
+        weight_decay=args.weight_decay)
+
+train_classifier(vae, data_labeled['image'], data_labeled['label'], optimizer)
+
+outfile_final = args.outdir + args.outfilename + '_classifier_final'
+print("writing the classifier parameters to " + outfile_final + '\n')
+torch.save(vae.classifier.state_dict(), outfile_final)
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))

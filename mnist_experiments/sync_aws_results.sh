@@ -1,4 +1,4 @@
-rsync -avL --progress -e 'ssh -i ./../../bryans_key_oregon.pem' \
-   ubuntu@ec2-54-187-164-254.us-west-2.compute.amazonaws.com:/home/ubuntu/astronomy/discrete_vae_experimentation/mnist_vae_results_aws/.\
-   /home/runjing_liu/Documents/astronomy/discrete_vae_experimentation/mnist_vae_results_aws/.
+rsync -avL --progress -e 'ssh -i ./../../../bryans_key_oregon.pem' \
+   ubuntu@ec2-34-214-215-172.us-west-2.compute.amazonaws.com:/home/ubuntu/astronomy/discrete_vae_experimentation/mnist_experiments/mnist_vae_results/.\
+   /home/runjing_liu/Documents/astronomy/discrete_vae_experimentation/mnist_experiments/mnist_vae_results/.
 
