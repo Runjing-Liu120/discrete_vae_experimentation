@@ -25,65 +25,27 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class SemiSupervisedVAE(nn.Module):
 
-    def __init__(self, encoder, decoder, classifier):
+    def __init__(self, conditional_vae, classifier, loglik_fun):
 
         super(SemiSupervisedVAE, self).__init__()
 
-        self.encoder = encoder
+        # conditional vae should take in an image in its first argument,
+        # the image label in the second argument, and return
+        # latent_means, latent_std, latent_samples, image_mean, image_var
+        self.conditional_vae = conditional_vae
+
         self.classifier = classifier
-        self.decoder = decoder
 
-        # check dimensions
-        assert self.encoder.latent_dim == self.decoder.latent_dim
-        assert self.encoder.n_classes == self.decoder.n_classes
-        assert self.encoder.slen == self.decoder.slen
+        self.loglik_fun = loglik_fun
 
-        assert self.classifier.n_classes == self.decoder.n_classes
-        assert self.classifier.slen == self.decoder.slen
+        assert self.classifier.n_classes == self.conditional_vae.n_classes
+        assert self.classifier.slen == self.conditional_vae.slen
 
-        # save some parameters
-        self.latent_dim = self.encoder.latent_dim
-        self.n_classes = self.encoder.n_classes
-        self.slen = self.encoder.slen
+        self.n_classes = self.classifier.n_classes
 
         # self.use_baseline = use_baseline
         # if self.use_baseline:
         #     self.baseline_learner = BaselineLearner(slen = self.slen)
-
-    def encoder_forward(self, image, one_hot_z):
-        assert one_hot_z.shape[0] == image.shape[0]
-        assert one_hot_z.shape[1] == self.n_classes
-
-        latent_means, latent_std = self.encoder(image, one_hot_z)
-
-        latent_samples = torch.randn(latent_means.shape).to(device) * latent_std + latent_means
-
-        return latent_means, latent_std, latent_samples
-
-    def decoder_forward(self, latent_samples, one_hot_z):
-        assert one_hot_z.shape[0] == latent_samples.shape[0]
-        assert one_hot_z.shape[1] == self.n_classes
-
-        image_mean = self.decoder(latent_samples, one_hot_z)
-
-        return image_mean # , image_std
-
-    def forward_conditional(self, image, z):
-        # z is a vector of class labels
-        # (integers, not one-hot-encoding)
-        assert len(z) == image.shape[0]
-
-        # one hot encode z
-        one_hot_z  = mnist_utils.get_one_hot_encoding_from_int(z, self.n_classes)
-
-        # pass through encoder
-        latent_means, latent_std, latent_samples = \
-            self.encoder_forward(image, one_hot_z)
-
-        # pass through decoder
-        image_mu = self.decoder_forward(latent_samples, one_hot_z)
-
-        return image_mu, latent_means, latent_std, latent_samples
 
     def get_conditional_loss(self, image, z):
         # Returns the expectation of the objective conditional
@@ -92,14 +54,12 @@ class SemiSupervisedVAE(nn.Module):
         # z is a vector of class labels
         assert len(z) == image.shape[0]
 
-        image_mu, latent_means, latent_std, latent_samples = \
-            self.forward_conditional(image, z)
+        latent_means, latent_std, latent_samples, image_mean, image_var = \
+            self.conditional_vae.forward(image, z)
 
-        # likelihood term
-        # loglik_z = mnist_utils.get_normal_loglik(image, image_mu,
-        #                                         image_std, scale = False)
-
-        loglik_z = mnist_utils.get_bernoulli_loglik(image_mu, image)
+        # conditional log likelihood
+        # loglik_z = mnist_utils.get_bernoulli_loglik(image_mu, image)
+        loglik_z = self.loglik_fun(image, image_mean, image_var)
 
         if not(np.all(np.isfinite(loglik_z.detach().cpu().numpy()))):
             print(z)
@@ -286,8 +246,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     else:
         optimizer = optim.Adam([
                 {'params': vae.classifier.parameters(), 'lr': lr},
-                {'params': vae.encoder.parameters(), 'lr': lr * 1e-1},
-                {'params': vae.decoder.parameters(), 'lr': lr * 1e-1}],
+                {'params': vae.conditional_vae.parameters(), 'lr': lr * 1e-1}],
                 weight_decay=weight_decay)
 
         # scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
@@ -372,11 +331,11 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         if epoch % save_every == 0:
             outfile_every = outfile + '_enc_epoch' + str(epoch)
             print("writing the encoder parameters to " + outfile_every + '\n')
-            torch.save(vae.encoder.state_dict(), outfile_every)
+            torch.save(vae.conditional_vae.ncoder.state_dict(), outfile_every)
 
             outfile_every = outfile + '_dec_epoch' + str(epoch)
             print("writing the decoder parameters to " + outfile_every + '\n')
-            torch.save(vae.decoder.state_dict(), outfile_every)
+            torch.save(vae.conditional_vae.decoder.state_dict(), outfile_every)
 
             outfile_every = outfile + '_classifier_epoch' + str(epoch)
             print("writing the classifier parameters to " + outfile_every + '\n')
@@ -395,11 +354,11 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     if save_final_enc:
         outfile_final = outfile + '_enc_final'
         print("writing the encoder parameters to " + outfile_final + '\n')
-        torch.save(vae.encoder.state_dict(), outfile_final)
+        torch.save(vae.conditional_vae.encoder.state_dict(), outfile_final)
 
         outfile_final = outfile + '_dec_final'
         print("writing the decoder parameters to " + outfile_final + '\n')
-        torch.save(vae.decoder.state_dict(), outfile_final)
+        torch.save(vae.conditional_vae.decoder.state_dict(), outfile_final)
 
         outfile_final = outfile + '_classifier_final'
         print("writing the classifier parameters to " + outfile_final + '\n')
@@ -448,16 +407,19 @@ def get_reconstructions(vae, image, labels = None):
         class_weights = vae.classifier(image)
 
         z_ind = torch.argmax(class_weights, dim = 1)
-        z_ind_one_hot = \
-            mnist_utils.get_one_hot_encoding_from_int(z_ind, vae.n_classes)
+        # z_ind_one_hot = \
+        #     mnist_utils.get_one_hot_encoding_from_int(z_ind, vae.n_classes)
     else:
         z_ind = labels
-        z_ind_one_hot = \
-            mnist_utils.get_one_hot_encoding_from_int(labels, vae.n_classes)
+        # z_ind_one_hot = \
+        #     mnist_utils.get_one_hot_encoding_from_int(labels, vae.n_classes)
 
-    latent_means, latent_std, latent_samples = \
-        vae.encoder_forward(image, z_ind_one_hot)
+    # latent_means, latent_std, latent_samples = \
+    #     vae.encoder_forward(image, z_ind_one_hot)
+    #
+    # image_mu = vae.decoder_forward(latent_means, z_ind_one_hot)
 
-    image_mu = vae.decoder_forward(latent_means, z_ind_one_hot)
+    latent_means, latent_std, latent_samples, image_mean, image_var = \
+        vae.conditional_vae.forward(image, z_ind)
 
-    return image_mu, z_ind
+    return image_mean, z_ind
