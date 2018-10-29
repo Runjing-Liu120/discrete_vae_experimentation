@@ -139,9 +139,13 @@ print('num_test: ', test_set.num_images)
 slen = train_set_unlabeled[0]['image'].shape[0]
 latent_dim = args.latent_dim
 n_classes = 10
-vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
-                            n_classes = n_classes,
-                            slen = slen)
+# vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
+#                             n_classes = n_classes,
+#                             slen = slen)
+vae = mnist_vae_lib.get_mnist_vae(latent_dim = latent_dim,
+                    n_classes = n_classes,
+                   slen = slen)
+                   
 vae.to(device)
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)

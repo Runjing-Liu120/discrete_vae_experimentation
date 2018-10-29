@@ -101,6 +101,7 @@ class SemiSupervisedVAE(nn.Module):
                                         use_baseline = use_baseline,
                                         use_term_one_baseline = True)
         else:
+            # we set log_q here to be the true labels
             pm_loss_z = self.get_conditional_loss(image, \
                                 torch.argmax(log_q, dim = 1).detach())
 
