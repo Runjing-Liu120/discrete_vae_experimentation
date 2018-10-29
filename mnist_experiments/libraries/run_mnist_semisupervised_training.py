@@ -13,6 +13,7 @@ from torch.utils.data import Dataset, DataLoader, sampler
 import mnist_data_lib
 import mnist_vae_lib
 import common_utils
+import semisupervised_vae_lib as ss_vae_lib
 
 import distutils.util
 import argparse
@@ -170,7 +171,7 @@ t0_train = time.time()
 
 outfile = os.path.join(args.outdir, args.outfilename)
 
-mnist_vae_lib.train_semisupervised_model(vae,
+ss_vae_lib.train_semisupervised_model(vae,
                     train_loader_unlabeled = train_loader_unlabeled,
                     test_loader = test_loader,
                     labeled_images = data_labeled['image'].to(device),
