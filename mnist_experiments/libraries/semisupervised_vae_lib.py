@@ -82,7 +82,7 @@ class SemiSupervisedVAE(nn.Module):
         # true labels for debugging only:
         if true_labels is None:
             log_q = self.classifier(image) #; print('max: ', torch.max(log_q)); print('min: ', torch.min(log_q));
-            assert np.all(log_q.detach().cpu().numpy() < 0)
+            assert np.all(log_q.detach().cpu().numpy() <= 0)
 
         else:
             # print('using true labels')
@@ -332,7 +332,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         if epoch % save_every == 0:
             outfile_every = outfile + '_enc_epoch' + str(epoch)
             print("writing the encoder parameters to " + outfile_every + '\n')
-            torch.save(vae.conditional_vae.ncoder.state_dict(), outfile_every)
+            torch.save(vae.conditional_vae.encoder.state_dict(), outfile_every)
 
             outfile_every = outfile + '_dec_epoch' + str(epoch)
             print("writing the decoder parameters to " + outfile_every + '\n')
@@ -400,7 +400,7 @@ def get_classification_accuracy(classifier, loader,
             wrong_labels = None
 
         n_images += len(z_ind)
-        if n_images > 1000:
+        if n_images > max_images:
             break
 
     return accuracy / n_images, wrong_images, wrong_labels
