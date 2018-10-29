@@ -151,12 +151,12 @@ vae.to(device)
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)
 
-    vae.encoder.load_state_dict(torch.load(args.enc_init,
+    vae.conditional_vae.encoder.load_state_dict(torch.load(args.enc_init,
                                     map_location=lambda storage, loc: storage))
 if args.load_dec:
     print('initializing decoder from ', args.dec_init)
 
-    vae.decoder.load_state_dict(torch.load(args.dec_init,
+    vae.conditional_vae.decoder.load_state_dict(torch.load(args.dec_init,
                                     map_location=lambda storage, loc: storage))
 if args.load_classifier:
     print('initializing classifier from ', args.classifier_init)
