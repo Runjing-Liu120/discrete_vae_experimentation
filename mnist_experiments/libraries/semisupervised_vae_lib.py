@@ -271,6 +271,9 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     train_class_accuracy = get_classification_accuracy(vae.classifier, train_loader_unlabeled)[0]
     test_class_accuracy = get_classification_accuracy(vae.classifier, test_loader)[0]
 
+    pred_labeled_classes = torch.argmax(vae.classifier(labeled_images), dim = 1)
+    labeled_class_accuracy = torch.mean(pred_labeled_classes == labels).float()
+    print('  * init labeled class accuracy: {:4g};'.format(labeled_class_accuracy))
     print('  * init train class accuracy: {:.4g};'.format(train_class_accuracy))
     print('  * init test class accuracy: {:4g};'.format(test_class_accuracy))
 
@@ -381,7 +384,7 @@ def get_classification_accuracy(classifier, loader,
     for batch_idx, data in enumerate(loader):
         images = data['image'].to(device)
         labels = data['label'].to(device)
-        
+
         class_weights = classifier(images)
 
         z_ind = torch.argmax(class_weights, dim = 1)
