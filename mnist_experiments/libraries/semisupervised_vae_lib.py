@@ -131,7 +131,8 @@ class SemiSupervisedVAE(nn.Module):
             mnist_utils.get_one_hot_encoding_from_int(labels, self.n_classes))
 
     def get_semisupervised_loss(self, unlabeled_images,
-                                    labeled_images, labels, num_train_unlabeled,
+                                    labeled_images, labels,
+                                    num_train_unlabeled, num_train_labeled,
                                     use_baseline = True,
                                     alpha = 1.0, topk = 0,
                                     true_labels = None):
@@ -145,6 +146,7 @@ class SemiSupervisedVAE(nn.Module):
                                         true_labels = true_labels)
 
         # labeled loss
+        batch_size_labeled = len(labels)
         labeled_loss = self.get_conditional_loss(labeled_images, labels)
 
         # cross entropy term
@@ -153,10 +155,10 @@ class SemiSupervisedVAE(nn.Module):
             self.get_class_label_cross_entropy(log_q_labeled, labels)
 
         return unlabeled_pm_loss.sum()  * (num_train_unlabeled / batch_size) +  \
-                    labeled_loss.sum() + alpha * cross_entropy_term.sum(), \
+                    (labeled_loss.sum() + alpha * cross_entropy_term.sum()) * (num_train_labeled / batch_size_labeled), \
                     unlabeled_map_loss
 
-    def eval_vae(self, train_loader, labeled_images, labels, \
+    def eval_vae(self, train_loader, train_loader_labeled, \
                         optimizer = None,
                         train = False,
                         use_baseline = True,
@@ -172,15 +174,20 @@ class SemiSupervisedVAE(nn.Module):
         avg_loss = 0.0
 
         num_images = train_loader.dataset.__len__()
+        num_images_labeled = train_loader_labeled.dataset.__len__()
+
         i = 0
 
-        for batch_idx, data in enumerate(train_loader):
-            unlabeled_images = data['image'].to(device)
+        for batch_idx, data in enumerate(zip(train_loader, train_loader_labeled)):
+            unlabeled_images = data[0]['image'].to(device)
 
             if use_true_labels:
-                true_labels = data['label'].to(device)
+                true_labels = data[0]['label'].to(device)
             else:
                 true_labels = None
+
+            labeled_images = data[1]['image'].to(device)
+            labels = data[1]['label'].to(device)
 
             if optimizer is not None:
                 optimizer.zero_grad()
@@ -189,7 +196,8 @@ class SemiSupervisedVAE(nn.Module):
 
             loss, unlabeled_map_loss = \
                 self.get_semisupervised_loss(unlabeled_images,
-                                                labeled_images, labels, num_images,
+                                                labeled_images, labels,
+                                                num_images, num_images_labeled,
                                                 use_baseline = use_baseline,
                                                 alpha = alpha, topk = topk,
                                                 true_labels = true_labels)
@@ -229,7 +237,7 @@ class SemiSupervisedVAE(nn.Module):
 #
 #     return accuracy / n_images
 
-def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labels,
+def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled,
                     test_loader, alpha = 1.0, topk = 0, use_baseline = True,
                     outfile = './mnist_vae_semisupervised',
                     n_epoch = 200, print_every = 10, save_every = 20,
@@ -260,9 +268,9 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     test_class_accuracy_array = []
 
     # get losses
-    train_loss = vae.eval_vae(train_loader_unlabeled, labeled_images, labels,
+    train_loss = vae.eval_vae(train_loader_unlabeled, train_loader_labeled,
                                 use_baseline = False, use_true_labels = use_true_labels)
-    test_loss = vae.eval_vae(test_loader, labeled_images, labels,
+    test_loss = vae.eval_vae(test_loader, train_loader_labeled,
                                 use_baseline = False, use_true_labels = use_true_labels)
 
     print('  * init train recon loss: {:.10g};'.format(train_loss))
@@ -272,8 +280,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     train_class_accuracy = get_classification_accuracy(vae.classifier, train_loader_unlabeled)[0]
     test_class_accuracy = get_classification_accuracy(vae.classifier, test_loader)[0]
 
-    pred_labeled_classes = torch.argmax(vae.classifier(labeled_images), dim = 1)
-    labeled_class_accuracy = torch.mean((pred_labeled_classes == labels).float())
+    labeled_class_accuracy = get_classification_accuracy(vae.classifier, train_loader_labeled)[0]
     print('  * init labeled class accuracy: {:4g};'.format(labeled_class_accuracy))
     print('  * init train class accuracy: {:.4g};'.format(train_class_accuracy))
     print('  * init test class accuracy: {:4g};'.format(test_class_accuracy))
@@ -292,8 +299,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
 
         unlabeled_loss = \
                 vae.eval_vae(train_loader_unlabeled,
-                                labeled_images = labeled_images,
-                                labels = labels,
+                                train_loader_labeled,
                                 optimizer = optimizer,
                                 train = True,
                                 use_baseline = use_baseline,
@@ -309,9 +315,9 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
         np.savetxt(outfile + '_batch_loss_array.txt', unlabeled_batch_losses)
 
         if epoch % print_every == 0:
-            train_loss = vae.eval_vae(train_loader_unlabeled, labeled_images, labels,
+            train_loss = vae.eval_vae(train_loader_unlabeled, train_loader_labeled,
                                         use_baseline = False, use_true_labels = use_true_labels)
-            test_loss = vae.eval_vae(test_loader, labeled_images, labels,
+            test_loss = vae.eval_vae(test_loader, train_loader_labeled,
                                         use_baseline = False, use_true_labels = use_true_labels)
 
             print('  * train recon loss: {:.10g};'.format(train_loss))
@@ -321,8 +327,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
             test_class_accuracy = get_classification_accuracy(vae.classifier, test_loader)[0]
 
             # get classification accuracy on labeled data
-            pred_labeled_classes = torch.argmax(vae.classifier(labeled_images), dim = 1)
-            labeled_class_accuracy = torch.mean((pred_labeled_classes == labels).float())
+            labeled_class_accuracy = get_classification_accuracy(vae.classifier, train_loader_labeled)[0]
             print('  * labeled class accuracy: {:4g};'.format(labeled_class_accuracy))
             print('  * train class accuracy: {:.4g};'.format(train_class_accuracy))
             print('  * test class accuracy: {:4g};'.format(test_class_accuracy))
