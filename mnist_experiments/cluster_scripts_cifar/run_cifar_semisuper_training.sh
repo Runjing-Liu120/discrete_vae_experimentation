@@ -8,9 +8,9 @@ python ../libraries/run_cifar_semisupervised_training.py \
 			--outdir '../cifar_vae_results/' \
 			--outfilename 'mnist_vae_true_labels' \
 			--alpha 1.0 \
-			--topk 10 \
-			--use_baseline False \
-			--propn_labeled 0.05 \
+			--topk 0 \
+			--use_baseline True \
+			--propn_labeled 0.005 \
 			--propn_sample 1.0 \
 			--learning_rate 1e-2 \
 			--use_true_labels True \

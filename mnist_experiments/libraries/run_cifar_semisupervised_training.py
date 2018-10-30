@@ -10,8 +10,10 @@ import json
 
 from torch.utils.data import Dataset, DataLoader, sampler
 
-import mnist_data_lib
-import mnist_vae_lib
+import cifar_data_utils
+import cifar_semisupervised_lib
+
+
 import common_utils
 import semisupervised_vae_lib as ss_vae_lib
 
@@ -144,7 +146,7 @@ cond_vae_config = {'kernel_num': 128,
                    'z_size': 128}
 
 classifier_config = {'depth': 28,
-                     'widen_factor': 10,
+                     'widen_factor': 1,
                      'dropout_rate': 0.3}
 
 print('image_config', image_config)
