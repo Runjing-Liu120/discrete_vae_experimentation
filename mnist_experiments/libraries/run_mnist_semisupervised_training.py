@@ -124,11 +124,11 @@ test_loader = torch.utils.data.DataLoader(
                 dataset=test_set,
                 batch_size=args.batch_size,
                 shuffle=False)
-
-for batch_idx, d in enumerate(train_loader_labeled):
-    data_labeled = d
-    break
-
+#
+# for batch_idx, d in enumerate(train_loader_labeled):
+#     data_labeled = d
+#     break
+#
 print('num_train_labeled: ', train_set_labeled.num_images)
 print('check: \n', data_labeled['image'].shape[0])
 
@@ -146,7 +146,7 @@ n_classes = 10
 vae = mnist_vae_lib.get_mnist_vae(latent_dim = latent_dim,
                     n_classes = n_classes,
                    slen = slen)
-                   
+
 vae.to(device)
 if args.load_enc:
     print('initializing encoder from ', args.enc_init)
@@ -173,9 +173,8 @@ outfile = os.path.join(args.outdir, args.outfilename)
 
 ss_vae_lib.train_semisupervised_model(vae,
                     train_loader_unlabeled = train_loader_unlabeled,
+                    train_loader_labeled = train_loader_labeled,
                     test_loader = test_loader,
-                    labeled_images = data_labeled['image'].to(device),
-                    labels = data_labeled['label'].to(device),
                     n_epoch = args.epochs,
                     alpha = args.alpha,
                     outfile = outfile,

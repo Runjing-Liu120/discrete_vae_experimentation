@@ -125,10 +125,6 @@ test_loader = torch.utils.data.DataLoader(
                 batch_size=args.batch_size,
                 shuffle=False)
 
-for batch_idx, d in enumerate(train_loader_labeled):
-    data_labeled = d
-    break
-
 print('num_train_labeled: ', train_set_labeled.num_images)
 print('check: \n', data_labeled['image'].shape[0])
 
@@ -184,9 +180,8 @@ outfile = os.path.join(args.outdir, args.outfilename)
 
 ss_vae_lib.train_semisupervised_model(vae,
                     train_loader_unlabeled = train_loader_unlabeled,
+                    train_loader_labeled = train_loader_labeled
                     test_loader = test_loader,
-                    labeled_images = data_labeled['image'].to(device),
-                    labels = data_labeled['label'].to(device),
                     n_epoch = args.epochs,
                     alpha = args.alpha,
                     outfile = outfile,
