@@ -248,7 +248,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     else:
         optimizer = optim.Adam([
                 {'params': vae.classifier.parameters(), 'lr': lr},
-                {'params': vae.conditional_vae.parameters(), 'lr': lr * 1e-1}],
+                {'params': vae.conditional_vae.parameters(), 'lr': lr}],
                 weight_decay=weight_decay)
 
         # scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
@@ -273,7 +273,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
     test_class_accuracy = get_classification_accuracy(vae.classifier, test_loader)[0]
 
     pred_labeled_classes = torch.argmax(vae.classifier(labeled_images), dim = 1)
-    labeled_class_accuracy = torch.mean(pred_labeled_classes == labels).float()
+    labeled_class_accuracy = torch.mean((pred_labeled_classes == labels).float())
     print('  * init labeled class accuracy: {:4g};'.format(labeled_class_accuracy))
     print('  * init train class accuracy: {:.4g};'.format(train_class_accuracy))
     print('  * init test class accuracy: {:4g};'.format(test_class_accuracy))
@@ -322,7 +322,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, labeled_images, labe
 
             # get classification accuracy on labeled data
             pred_labeled_classes = torch.argmax(vae.classifier(labeled_images), dim = 1)
-            labeled_class_accuracy = torch.mean(pred_labeled_classes == labels).float()
+            labeled_class_accuracy = torch.mean((pred_labeled_classes == labels).float())
             print('  * labeled class accuracy: {:4g};'.format(labeled_class_accuracy))
             print('  * train class accuracy: {:.4g};'.format(train_class_accuracy))
             print('  * test class accuracy: {:4g};'.format(test_class_accuracy))
