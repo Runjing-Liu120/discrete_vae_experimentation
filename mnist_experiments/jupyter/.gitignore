@@ -3,4 +3,4 @@ data/*
 test_dec_final
 test_enc_final
 testloss_array.txt
-
+*.txt
