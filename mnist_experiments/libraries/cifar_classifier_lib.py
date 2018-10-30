@@ -44,9 +44,12 @@ class wide_basic(nn.Module):
         return out
 
 class Wide_ResNet(nn.Module):
-    def __init__(self, depth, widen_factor, dropout_rate, num_classes):
+    def __init__(self, slen, depth, widen_factor, dropout_rate, n_classes):
         super(Wide_ResNet, self).__init__()
         self.in_planes = 16
+
+        self.slen = slen
+        self.n_classes = n_classes
 
         assert ((depth-4)%6 ==0), 'Wide-resnet depth should be 6n+4'
         n = int((depth-4)/6)
@@ -60,7 +63,7 @@ class Wide_ResNet(nn.Module):
         self.layer2 = self._wide_layer(wide_basic, nStages[2], n, dropout_rate, stride=2)
         self.layer3 = self._wide_layer(wide_basic, nStages[3], n, dropout_rate, stride=2)
         self.bn1 = nn.BatchNorm2d(nStages[3], momentum=0.9)
-        self.linear = nn.Linear(nStages[3], num_classes)
+        self.linear = nn.Linear(nStages[3], n_classes)
 
         self.log_softmax = nn.LogSoftmax(dim=1)
 

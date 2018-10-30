@@ -36,6 +36,7 @@ class SemiSupervisedVAE(nn.Module):
 
         self.classifier = classifier
 
+        # this function should take in (image, image_mean, image_var)
         self.loglik_fun = loglik_fun
 
         assert self.classifier.n_classes == self.conditional_vae.n_classes
