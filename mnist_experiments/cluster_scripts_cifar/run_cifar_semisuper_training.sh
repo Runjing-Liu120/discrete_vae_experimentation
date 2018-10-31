@@ -1,8 +1,8 @@
 #!/bin/bash
 
 python ../libraries/run_cifar_semisupervised_training.py \
-			--epochs 50 \
-			--save_every 10 \
+			--epochs 500 \
+			--save_every 50 \
 			--batch_size 256 \
 			--seed 901 \
 			--outdir '../cifar_vae_results/' \
@@ -10,7 +10,7 @@ python ../libraries/run_cifar_semisupervised_training.py \
 			--alpha 1.0 \
 			--topk 0 \
 			--use_baseline True \
-			--propn_labeled 0.005 \
+			--propn_labeled 0.05 \
 			--propn_sample 1.0 \
 			--learning_rate 1e-2 \
 			--use_true_labels True \

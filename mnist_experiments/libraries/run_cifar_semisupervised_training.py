@@ -112,7 +112,7 @@ train_set_labeled, train_set_unlabeled, test_set = \
 
 train_loader_labeled = torch.utils.data.DataLoader(
                  dataset=train_set_labeled,
-                 batch_size=args.batch_size,
+                 batch_size=round(args.batch_size * args.propn_labeled),
                  shuffle=True)
 
 train_loader_unlabeled = torch.utils.data.DataLoader(
@@ -126,7 +126,7 @@ test_loader = torch.utils.data.DataLoader(
                 shuffle=False)
 
 print('num_train_labeled: ', train_set_labeled.num_images)
-print('check: \n', data_labeled['image'].shape[0])
+# print('check: \n', data_labeled['image'].shape[0])
 
 print('num_train_unlabeled: \n', train_set_unlabeled.num_images)
 
@@ -180,7 +180,7 @@ outfile = os.path.join(args.outdir, args.outfilename)
 
 ss_vae_lib.train_semisupervised_model(vae,
                     train_loader_unlabeled = train_loader_unlabeled,
-                    train_loader_labeled = train_loader_labeled
+                    train_loader_labeled = train_loader_labeled,
                     test_loader = test_loader,
                     n_epoch = args.epochs,
                     alpha = args.alpha,
