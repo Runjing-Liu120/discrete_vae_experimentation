@@ -109,3 +109,27 @@ def load_semisupervised_cifar_dataset(data_dir = '../cifar100_data/',
                             train_set = False)
 
     return train_set_labeled, train_set_unlabeled, test_set
+
+
+# Functions to examine class accuracies and reconstruction_loss
+
+# LOAD TRUE LABELS
+def unpickle(file):
+    import pickle
+    with open(file, 'rb') as fo:
+        dict = pickle.load(fo, encoding='bytes')
+    return dict
+
+labels_legend_all = unpickle('../cifar100_data/cifar-100-python/meta')
+fine_labels_legend_ = labels_legend_all[b'fine_label_names']
+fine_labels_legend = [str(fine_labels_legend_[i])[2:-1] for i in range(len(fine_labels_legend_))]
+
+def get_topk_labels(class_weights, topk):
+    assert len(class_weights.shape) == 1, 'this is implemented only for a vector of class weights'
+    probs, indx = torch.topk(class_weights, k = topk)
+
+    labels = []
+    for i in range(topk):
+        labels.append(fine_labels_legend[indx[i]])
+
+    return probs, labels
