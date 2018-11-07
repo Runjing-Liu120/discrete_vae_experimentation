@@ -112,7 +112,7 @@ train_set_labeled, train_set_unlabeled, test_set = \
 
 train_loader_labeled = torch.utils.data.DataLoader(
                  dataset=train_set_labeled,
-                 batch_size=round(args.batch_size * args.propn_labeled),
+                 batch_size=round(args.batch_size * args.propn_labeled / (1 - args.propn_labeled)),
                  shuffle=True)
 
 train_loader_unlabeled = torch.utils.data.DataLoader(
