@@ -99,9 +99,12 @@ def load_semisupervised_cifar_dataset(data_dir = '../cifar100_data/',
     train_set_labeled = CIFAR100DataSet(data_dir = data_dir,
                             indices = subs_train_set[:num_labeled_images],
                             train_set = True)
-    train_set_unlabeled = CIFAR100DataSet(data_dir = data_dir,
-                            indices = subs_train_set[num_labeled_images:],
-                            train_set = True)
+    if propn_labeled == 1:
+        train_set_unlabeled = None
+    else:
+        train_set_unlabeled = CIFAR100DataSet(data_dir = data_dir,
+                                indices = subs_train_set[num_labeled_images:],
+                                train_set = True)
 
     # get test set as usual
     test_set = CIFAR100DataSet(data_dir = data_dir,

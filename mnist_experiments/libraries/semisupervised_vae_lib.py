@@ -137,17 +137,23 @@ class SemiSupervisedVAE(nn.Module):
                                     alpha = 1.0, topk = 0,
                                     true_labels = None):
 
-        # unlabeled loss
-        batch_size = unlabeled_images.shape[0]
-        unlabeled_pm_loss, unlabeled_map_loss = \
-            self.get_unlabeled_pm_loss(unlabeled_images,
-                                        topk = topk,
-                                        use_baseline = use_baseline,
-                                        true_labels = true_labels)
-
         # labeled loss
         batch_size_labeled = len(labels)
         labeled_loss = self.get_conditional_loss(labeled_images, labels)
+
+        # unlabeled loss
+        if unlabeled_images is None:
+            batch_size = 1
+            num_train_unlabeled = 0.0
+            unlabeled_pm_loss = torch.Tensor([0.])
+            unlabeled_map_loss = labeled_loss.sum()
+        else:
+            batch_size = unlabeled_images.shape[0]
+            unlabeled_pm_loss, unlabeled_map_loss = \
+                self.get_unlabeled_pm_loss(unlabeled_images,
+                                            topk = topk,
+                                            use_baseline = use_baseline,
+                                            true_labels = true_labels)
 
         # cross entropy term
         log_q_labeled = self.classifier(labeled_images)
@@ -173,26 +179,43 @@ class SemiSupervisedVAE(nn.Module):
 
         avg_loss = 0.0
 
-        num_images = train_loader.dataset.__len__()
-        num_images_labeled = train_loader_labeled.dataset.__len__()
-
         i = 0
 
-        for batch_idx, data in enumerate(zip(train_loader, train_loader_labeled)):
-            unlabeled_images = data[0]['image'].to(device)
+        if train_loader is None:
+            # only loop through labeled images then
+            enumeration = enumerate(train_loader_labeled)
+            num_images = train_loader_labeled.dataset.__len__()
+        else:
+            enumeration = enumerate(zip(train_loader, train_loader_labeled))
+            num_images = train_loader.dataset.__len__()
 
-            if use_true_labels:
-                true_labels = data[0]['label'].to(device)
-            else:
+        num_images_labeled = train_loader_labeled.dataset.__len__()
+
+        for batch_idx, data in enumeration:
+
+            if train_loader is None:
+                unlabeled_images = None
+                labeled_images = data['image'].to(device)
+                labels = data['label'].to(device)
+
                 true_labels = None
 
-            labeled_images = data[1]['image'].to(device)
-            labels = data[1]['label'].to(device)
+            else:
+                unlabeled_images = data[0]['image'].to(device)
+
+                if use_true_labels:
+                    true_labels = data[0]['label'].to(device)
+                else:
+                    true_labels = None
+
+                labeled_images = data[1]['image'].to(device)
+                labels = data[1]['label'].to(device)
 
             if optimizer is not None:
                 optimizer.zero_grad()
 
-            batch_size = unlabeled_images.size()[0]
+            # labeled or unlabeled images here?
+            batch_size = labeled_images.size()[0]
 
             loss, unlabeled_map_loss = \
                 self.get_semisupervised_loss(unlabeled_images,
@@ -380,6 +403,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
 def get_classification_accuracy(classifier, loader,
                                     return_wrong_images = False,
                                     max_images = np.inf):
+    if loader is None:
+        return torch.Tensor([-1.])
 
     n_images = 0.0
     accuracy = 0.0

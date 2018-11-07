@@ -110,14 +110,23 @@ train_set_labeled, train_set_unlabeled, test_set = \
     cifar_data_utils.load_semisupervised_cifar_dataset(propn_sample = args.propn_sample,
                                                     propn_labeled = args.propn_labeled)
 
+if args.propn_labeled == 1:
+    print('all images are labeled. ')
+    train_loader_unlabeled = None
+    labeled_batchsize = args.batch_size
+else:
+    train_loader_unlabeled = torch.utils.data.DataLoader(
+                     dataset=train_set_unlabeled,
+                     batch_size=args.batch_size,
+                     shuffle=True)
+    print('num_train_unlabeled: \n', train_set_unlabeled.num_images)
+
+    labeled_batchsize = round(args.propn_labeled / (1 - args.propn_labeled))
+
+
 train_loader_labeled = torch.utils.data.DataLoader(
                  dataset=train_set_labeled,
-                 batch_size=round(args.batch_size * args.propn_labeled / (1 - args.propn_labeled)),
-                 shuffle=True)
-
-train_loader_unlabeled = torch.utils.data.DataLoader(
-                 dataset=train_set_unlabeled,
-                 batch_size=args.batch_size,
+                 batch_size=labeled_batchsize,
                  shuffle=True)
 
 test_loader = torch.utils.data.DataLoader(
@@ -128,7 +137,6 @@ test_loader = torch.utils.data.DataLoader(
 print('num_train_labeled: ', train_set_labeled.num_images)
 # print('check: \n', data_labeled['image'].shape[0])
 
-print('num_train_unlabeled: \n', train_set_unlabeled.num_images)
 
 print('num_test: ', test_set.num_images)
 
