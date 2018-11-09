@@ -10,9 +10,8 @@ from torch.distributions import Normal, Categorical
 import torch.nn.functional as F
 
 from cifar_vae_lib import CIFARConditionalVAE
-# from cifar_classifier_lib import Wide_ResNet
-
-from mnist_vae_lib import mnist_loglik
+import cifar_data_utils
+import mnist_utils
 
 import timeit
 
@@ -79,6 +78,12 @@ class MyClassifier(nn.Module):
 
         return self.log_softmax(out)
 
+def cifar_loglik(image, image_mean, image_var):
+    image_unscaled = image * cifar_data_utils.CIFAR_STD_TENSOR + \
+                        cifar_data_utils.CIFAR_MEAN_TENSOR
+
+    return mnist_utils.get_bernoulli_loglik(image_mean, image_unscaled)
+
 
 def get_cifar_semisuperivsed_vae(image_config = {'slen': 32,
                                                  'channel_num': 3,
@@ -99,7 +104,4 @@ def get_cifar_semisuperivsed_vae(image_config = {'slen': 32,
                                 n_classes = image_config['n_classes'],
                                 slen = image_config['slen'])
 
-    # cifar_loglik = lambda image, image_mean, image_var: \
-    #                     nn.BCELoss(reduction='none')(image_mean, image)
-
-    return ss_vae_lib.SemiSupervisedVAE(cond_vae, classifier, mnist_loglik)
+    return ss_vae_lib.SemiSupervisedVAE(cond_vae, classifier, cifar_loglik)

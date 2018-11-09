@@ -154,11 +154,12 @@ class SemiSupervisedVAE(nn.Module):
                                             topk = topk,
                                             use_baseline = use_baseline,
                                             true_labels = true_labels)
-
+        # NOTE: commented out for debugging, atm
         # cross entropy term
-        log_q_labeled = self.classifier(labeled_images)
-        cross_entropy_term = \
-            self.get_class_label_cross_entropy(log_q_labeled, labels)
+        # log_q_labeled = self.classifier(labeled_images)
+        # cross_entropy_term = \
+        #     self.get_class_label_cross_entropy(log_q_labeled, labels)
+        cross_entropy_term = torch.Tensor([0.0])
 
         return unlabeled_pm_loss.sum()  * (num_train_unlabeled / batch_size) +  \
                     (labeled_loss.sum() + alpha * cross_entropy_term.sum()) * (num_train_labeled / batch_size_labeled), \
@@ -300,19 +301,19 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
     print('  * init test recon loss: {:.10g};'.format(test_loss))
 
     # get test accuracies
-    train_class_accuracy = get_classification_accuracy(vae.classifier, train_loader_unlabeled)[0]
-    test_class_accuracy = get_classification_accuracy(vae.classifier, test_loader)[0]
-
-    labeled_class_accuracy = get_classification_accuracy(vae.classifier, train_loader_labeled)[0]
-    print('  * init labeled class accuracy: {:4g};'.format(labeled_class_accuracy))
-    print('  * init train class accuracy: {:.4g};'.format(train_class_accuracy))
-    print('  * init test class accuracy: {:4g};'.format(test_class_accuracy))
+    # train_class_accuracy = get_classification_accuracy(vae.classifier, train_loader_unlabeled)[0]
+    # test_class_accuracy = get_classification_accuracy(vae.classifier, test_loader)[0]
+    #
+    # labeled_class_accuracy = get_classification_accuracy(vae.classifier, train_loader_labeled)[0]
+    # print('  * init labeled class accuracy: {:4g};'.format(labeled_class_accuracy))
+    # print('  * init train class accuracy: {:.4g};'.format(train_class_accuracy))
+    # print('  * init test class accuracy: {:4g};'.format(test_class_accuracy))
 
     iter_array.append(0)
     train_loss_array.append(train_loss.detach().cpu().numpy())
     test_loss_array.append(test_loss.detach().cpu().numpy())
-    train_class_accuracy_array.append(train_class_accuracy.detach().cpu().numpy())
-    test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
+    # train_class_accuracy_array.append(train_class_accuracy.detach().cpu().numpy())
+    # test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
 
     unlabeled_batch_losses = []
     unlabeled_batch_losses.append(train_loss.detach().cpu().numpy())
@@ -350,16 +351,16 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
             test_class_accuracy = get_classification_accuracy(vae.classifier, test_loader)[0]
 
             # get classification accuracy on labeled data
-            labeled_class_accuracy = get_classification_accuracy(vae.classifier, train_loader_labeled)[0]
-            print('  * labeled class accuracy: {:4g};'.format(labeled_class_accuracy))
-            print('  * train class accuracy: {:.4g};'.format(train_class_accuracy))
-            print('  * test class accuracy: {:4g};'.format(test_class_accuracy))
+            # labeled_class_accuracy = get_classification_accuracy(vae.classifier, train_loader_labeled)[0]
+            # print('  * labeled class accuracy: {:4g};'.format(labeled_class_accuracy))
+            # print('  * train class accuracy: {:.4g};'.format(train_class_accuracy))
+            # print('  * test class accuracy: {:4g};'.format(test_class_accuracy))
 
             iter_array.append(epoch)
             train_loss_array.append(train_loss.detach().cpu().numpy())
             test_loss_array.append(test_loss.detach().cpu().numpy())
-            train_class_accuracy_array.append(train_class_accuracy.detach().cpu().numpy())
-            test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
+            # train_class_accuracy_array.append(train_class_accuracy.detach().cpu().numpy())
+            # test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
 
         if epoch % save_every == 0:
             outfile_every = outfile + '_enc_epoch' + str(epoch)
@@ -378,8 +379,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
             loss_array[0, :] = iter_array
             loss_array[1, :] = train_loss_array
             loss_array[2, :] = test_loss_array
-            loss_array[3, :] = train_class_accuracy_array
-            loss_array[4, :] = test_class_accuracy_array
+            # loss_array[3, :] = train_class_accuracy_array
+            # loss_array[4, :] = test_class_accuracy_array
 
             np.savetxt(outfile + '_loss_array.txt', loss_array)
 
