@@ -145,7 +145,7 @@ class SemiSupervisedVAE(nn.Module):
         if unlabeled_images is None:
             batch_size = 1
             num_train_unlabeled = 0.0
-            unlabeled_pm_loss = torch.Tensor([0.])
+            unlabeled_pm_loss = torch.Tensor([0.]).to(device)
             unlabeled_map_loss = labeled_loss.sum()
         else:
             batch_size = unlabeled_images.shape[0]

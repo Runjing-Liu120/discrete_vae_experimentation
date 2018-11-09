@@ -6,11 +6,11 @@ python ../libraries/run_cifar_semisupervised_training.py \
 			--batch_size 256 \
 			--seed 901 \
 			--outdir '../cifar_vae_results/' \
-			--outfilename 'cifar_vae_true_labels_halflabeled' \
+			--outfilename 'cifar_vae_densenet_true_labels_alllabeled' \
 			--alpha 1.0 \
 			--topk 0 \
 			--use_baseline True \
-			--propn_labeled 0.5 \
+			--propn_labeled 1.0 \
 			--propn_sample 1.0 \
 			--learning_rate 1e-3 \
 			--use_true_labels True \
