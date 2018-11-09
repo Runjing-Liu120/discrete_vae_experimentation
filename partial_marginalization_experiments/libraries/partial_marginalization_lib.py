@@ -73,6 +73,8 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
     for i in range(topk):
         summed_indx = topk_domain[:, i]
         f_z_i = f_z(summed_indx)
+        assert len(f_z_i) == log_q.shape[0]
+
         log_q_i = log_q[seq_tensor, summed_indx]
 
         if (use_term_one_baseline) and (use_baseline):

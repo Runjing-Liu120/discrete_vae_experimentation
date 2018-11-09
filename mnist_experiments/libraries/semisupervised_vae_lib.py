@@ -215,7 +215,7 @@ class SemiSupervisedVAE(nn.Module):
                 optimizer.zero_grad()
 
             # labeled or unlabeled images here?
-            batch_size = labeled_images.size()[0]
+            # batch_size = labeled_images.size()[0]
 
             loss, unlabeled_map_loss = \
                 self.get_semisupervised_loss(unlabeled_images,
