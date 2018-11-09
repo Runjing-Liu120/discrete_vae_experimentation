@@ -34,7 +34,7 @@ class CIFARConditionalVAE(nn.Module):
         self.cond_encoder = nn.Sequential(
             self._linear(self.feature_volume + self.n_classes, 128),
             self._linear(128, 128),
-            self._linear(128, z_size * 2),
+            self._linear(128, z_size * 2, relu = False),
         )
 
         # decodr that encorporates class label
