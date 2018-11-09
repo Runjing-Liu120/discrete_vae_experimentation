@@ -123,11 +123,14 @@ else:
 
     labeled_batchsize = round(args.propn_labeled / (1 - args.propn_labeled))
 
+    print('len(train_loader_unlabeled): ', len(train_loader_unlabeled))
+
 
 train_loader_labeled = torch.utils.data.DataLoader(
                  dataset=train_set_labeled,
                  batch_size=labeled_batchsize,
                  shuffle=True)
+print('len(train_loader_labeled): ', len(train_loader_labeled))
 
 test_loader = torch.utils.data.DataLoader(
                 dataset=test_set,
@@ -136,7 +139,6 @@ test_loader = torch.utils.data.DataLoader(
 
 print('num_train_labeled: ', train_set_labeled.num_images)
 # print('check: \n', data_labeled['image'].shape[0])
-
 
 print('num_test: ', test_set.num_images)
 
@@ -149,9 +151,11 @@ image_config = {'slen': 32,
 cond_vae_config = {'kernel_num': 128,
                    'z_size': 128}
 
-classifier_config = {'depth': 28,
-                     'widen_factor': 1,
-                     'dropout_rate': 0.3}
+# classifier_config = {'depth': 28,
+#                      'widen_factor': 1,
+#                      'dropout_rate': 0.3}
+classifier_config = {'depth': 100,
+                     'k': 12}
 
 print('image_config', image_config)
 print('cond_vae_config', cond_vae_config)

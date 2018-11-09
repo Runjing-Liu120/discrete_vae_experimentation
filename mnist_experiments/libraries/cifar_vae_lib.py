@@ -146,11 +146,11 @@ class CIFARConditionalVAE(nn.Module):
         )
         return eps.mul(std).add_(mean)
 
-    def reconstruction_loss(self, x_reconstructed, x):
-        return nn.BCELoss(size_average=False)(x_reconstructed, x) / x.size(0)
-
-    def kl_divergence_loss(self, mean, logvar):
-        return ((mean**2 + logvar.exp() - 1 - logvar) / 2).mean()
+    # def reconstruction_loss(self, x_reconstructed, x):
+    #     return nn.BCELoss(size_average=False)(x_reconstructed, x) / x.size(0)
+    #
+    # def kl_divergence_loss(self, mean, logvar):
+    #     return ((mean**2 + logvar.exp() - 1 - logvar) / 2).mean()
 
     # =====
     # Utils
