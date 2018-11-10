@@ -159,7 +159,7 @@ class SemiSupervisedVAE(nn.Module):
         # log_q_labeled = self.classifier(labeled_images)
         # cross_entropy_term = \
         #     self.get_class_label_cross_entropy(log_q_labeled, labels)
-        cross_entropy_term = torch.Tensor([0.0])
+        cross_entropy_term = torch.Tensor([0.0]).to(device)
 
         return unlabeled_pm_loss.sum()  * (num_train_unlabeled / batch_size) +  \
                     (labeled_loss.sum() + alpha * cross_entropy_term.sum()) * (num_train_labeled / batch_size_labeled), \
