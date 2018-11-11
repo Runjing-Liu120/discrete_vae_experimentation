@@ -78,9 +78,17 @@ class MyClassifier(nn.Module):
 
         return self.log_softmax(out)
 
-def cifar_loglik(image, image_mean, image_var):
-    image_unscaled = image * cifar_data_utils.CIFAR10_STD_TENSOR.to(device) + \
-                        cifar_data_utils.CIFAR10_MEAN_TENSOR.to(device); # TODO FIX THIS
+def cifar_loglik(image, image_mean, image_var, n_classes):
+    if n_classes == 100:
+        # we are doing cifar100
+        CIFAR_STD_TENSOR = cifar_data_utils.CIFAR100_STD_TENSOR
+        CIFAR_MEAN_TENSOR = cifar_data_utils.CIFAR100_MEAN_TENSOR
+    else:
+        CIFAR_STD_TENSOR = cifar_data_utils.CIFAR10_STD_TENSOR
+        CIFAR_MEAN_TENSOR = cifar_data_utils.CIFAR10_MEAN_TENSOR
+
+    image_unscaled = image * CIFAR_STD_TENSOR.to(device) + \
+                                CIFAR_MEAN_TENSOR.to(device)
 
     return mnist_utils.get_bernoulli_loglik(image_mean, image_unscaled)
 
@@ -103,5 +111,8 @@ def get_cifar_semisuperivsed_vae(image_config = {'slen': 32,
                                 k = classifier_config['k'],
                                 n_classes = image_config['n_classes'],
                                 slen = image_config['slen'])
+    cifar_spec_loglik = lambda image, image_mean, image_var : \
+                                cifar_loglik(image, image_mean, image_var,
+                                                image_config['n_classes'])
 
     return ss_vae_lib.SemiSupervisedVAE(cond_vae, classifier, cifar_loglik)
