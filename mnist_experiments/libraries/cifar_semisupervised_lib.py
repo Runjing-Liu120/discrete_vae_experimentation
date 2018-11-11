@@ -79,8 +79,8 @@ class MyClassifier(nn.Module):
         return self.log_softmax(out)
 
 def cifar_loglik(image, image_mean, image_var):
-    image_unscaled = image * cifar_data_utils.CIFAR_STD_TENSOR.to(device) + \
-                        cifar_data_utils.CIFAR_MEAN_TENSOR.to(device)
+    image_unscaled = image * cifar_data_utils.CIFAR10_STD_TENSOR.to(device) + \
+                        cifar_data_utils.CIFAR10_MEAN_TENSOR.to(device); # TODO FIX THIS
 
     return mnist_utils.get_bernoulli_loglik(image_mean, image_unscaled)
 

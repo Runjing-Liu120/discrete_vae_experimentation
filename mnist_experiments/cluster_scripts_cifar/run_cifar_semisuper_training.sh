@@ -1,12 +1,13 @@
 #!/bin/bash
 
 python ../libraries/run_cifar_semisupervised_training.py \
+			--use_cifar100 False \
 			--epochs 50 \
 			--save_every 10 \
 			--batch_size 128 \
 			--seed 901 \
 			--outdir '../cifar_vae_results/' \
-			--outfilename 'testing_vae_alllabeled' \
+			--outfilename 'testing_vae_cifar10_alllabeled' \
 			--alpha 1.0 \
 			--topk 0 \
 			--use_baseline True \
