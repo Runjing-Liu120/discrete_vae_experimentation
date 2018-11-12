@@ -78,8 +78,8 @@ class MyClassifier(nn.Module):
 
         return self.log_softmax(out)
 
-def cifar_loglik(image, image_mean, image_var, n_classes):
-    if n_classes == 100:
+def cifar_loglik(image, image_mean, image_var, use_cifar100):
+    if use_cifar100:
         # we are doing cifar100
         CIFAR_STD_TENSOR = cifar_data_utils.CIFAR100_STD_TENSOR
         CIFAR_MEAN_TENSOR = cifar_data_utils.CIFAR100_MEAN_TENSOR
@@ -93,7 +93,8 @@ def cifar_loglik(image, image_mean, image_var, n_classes):
     return mnist_utils.get_bernoulli_loglik(image_mean, image_unscaled)
 
 
-def get_cifar_semisuperivsed_vae(image_config = {'slen': 32,
+def get_cifar_semisuperivsed_vae(image_config = {'use_cifar100': True,
+                                                 'slen': 32,
                                                  'channel_num': 3,
                                                  'n_classes': 100},
                                 cond_vae_config = {'kernel_num': 128,
@@ -105,7 +106,8 @@ def get_cifar_semisuperivsed_vae(image_config = {'slen': 32,
                                     channel_num = image_config['channel_num'],
                                     kernel_num = cond_vae_config['kernel_num'],
                                     z_size = cond_vae_config['z_size'],
-                                    n_classes = image_config['n_classes'])
+                                    n_classes = image_config['n_classes'],
+                                    use_cifar100 = image_config['use_cifar100'])
 
     classifier = MyClassifier(depth = classifier_config['depth'],
                                 k = classifier_config['k'],
@@ -114,6 +116,6 @@ def get_cifar_semisuperivsed_vae(image_config = {'slen': 32,
 
     cifar_spec_loglik = lambda image, image_mean, image_var : \
                                 cifar_loglik(image, image_mean, image_var,
-                                                image_config['n_classes'])
+                                                image_config['use_cifar100'])
 
     return ss_vae_lib.SemiSupervisedVAE(cond_vae, classifier, cifar_spec_loglik)

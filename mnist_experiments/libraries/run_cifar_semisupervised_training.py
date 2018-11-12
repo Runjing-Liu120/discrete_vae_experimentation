@@ -162,7 +162,8 @@ print('num_test: ', test_set.num_images)
 
 # SET UP VAE
 print('setting up VAE: ')
-image_config = {'slen': 32,
+image_config = {'use_cifar100', args.use_cifar100,
+                'slen': 32,
                  'channel_num': 3,
                  'n_classes': n_classes}
 
