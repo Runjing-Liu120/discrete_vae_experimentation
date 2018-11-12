@@ -380,8 +380,8 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
                 data_labeled = d
                 break
 
-            print('debugging loss: ', vae.get_conditional_loss(data_labeled['image'], data_labeled['label']))
-            image_mu, z_ind = get_reconstructions(vae, data_labeled['image'], labels = labels))
+            print('debugging loss: ', vae.get_conditional_loss(data_labeled['image'].to(device), data_labeled['label'].to(device)))
+            image_mu, z_ind = get_reconstructions(vae, data_labeled['image'].to(device), labels = data_labeled['label'].to(device))
             print('debug recon means', np.unique(image_mu.cpu().detach().numpy().flatten()))
 
 
