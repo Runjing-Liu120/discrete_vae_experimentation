@@ -385,7 +385,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
             with open('../cifar10_data/test_batch_cifar10.pkl', 'rb') as f:
                 data_labeld_r = pickle.load(f)
 
-
+            vae.eval()
             print('debugging loss: ', vae.get_conditional_loss(data_labeld_r['image'].to(device), data_labeld_r['label'].to(device)))
             image_mu, z_ind = get_reconstructions(vae, data_labeld_r['image'].to(device), labels = data_labeld_r['label'].to(device))
             print('debug recon means', np.unique(image_mu.cpu().detach().numpy().flatten()))
@@ -411,7 +411,7 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
         # print("writing the decoder parameters to " + outfile_final + '\n')
         # torch.save(vae.conditional_vae.decoder.state_dict(), outfile_final)
 
-        outfile_every = outfile + '_cond_vae_final' 
+        outfile_every = outfile + '_cond_vae_final'
         print("writing the conditional_vae parameters to " + outfile_every + '\n')
         torch.save(vae.conditional_vae.state_dict(), outfile_every)
 
