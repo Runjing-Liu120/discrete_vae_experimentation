@@ -170,9 +170,9 @@ for epoch in range(1, args.epochs + 1):
 
         kl_term = mnist_utils.get_kl_q_standard_normal(latent_means, \
                                                             latent_std).sum()
-        loss = recon_loss + kl_term
+        loss = recon_loss + kl_term; optimizer.zero_grad()
 
-        (loss * train_set.num_images / images.shape[0]).backward()
+        (loss * train_set.num_images / images.shape[0]).backward(); optimizer.step()
 
         avg_loss += loss / train_set.num_images
 
@@ -180,10 +180,9 @@ for epoch in range(1, args.epochs + 1):
 
     if epoch % args.save_every == 0:
         torch.save(vae.conditional_vae.state_dict(), args.outdir + args.outfilename)
-        with open('../cifar10_data/test_batch_cifar10.pkl', 'rb') as f:
-            data_labeld_r = pickle.load(f)
+        with open('../cifar_vae_results/debugging_batch.pkl', 'wb') as f:
+            pickle.dump(image_bern, f, pickle.HIGHEST_PROTOCOL)
         vae.eval()
-        print('debugging loss: ', vae.get_conditional_loss(data_labeld_r['image'].to(device),
-                                    data_labeld_r['label'].to(device)).mean())
+        print('debugging loss: ', -mnist_utils.get_bernoulli_loglik(pi = image_mean, x = image_bern).sum())
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))
