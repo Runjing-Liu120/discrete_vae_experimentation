@@ -153,18 +153,18 @@ for epoch in range(1, args.epochs + 1):
 
     for batch_idx, data in enumerate(train_loader):
         images = data['image'].to(device)
+        image_bern = images * cifar_data_utils.CIFAR10_STD_TENSOR.to(device) + \
+                        cifar_data_utils.CIFAR10_MEAN_TENSOR.to(device)
+        assert torch.min(image_bern) > -1e-5
+
         labels = data['label'].to(device)
 
         # forward
         vae.train()
         latent_means, latent_std, latent_samples, image_mean, image_var = \
-            vae.conditional_vae.forward(images, labels)
+            vae.conditional_vae.forward(image_bern, labels)
 
         # get loss
-        image_bern = images * cifar_data_utils.CIFAR10_STD_TENSOR.to(device) + \
-                        cifar_data_utils.CIFAR10_MEAN_TENSOR.to(device)
-        assert torch.min(image_bern) > -1e-5
-
         recon_loss = -mnist_utils.get_bernoulli_loglik(pi = image_mean,
                                                         x = image_bern).sum()
 
@@ -172,7 +172,7 @@ for epoch in range(1, args.epochs + 1):
                                                             latent_std).sum()
         loss = recon_loss + kl_term
 
-        loss.backward()
+        (loss * train_set.num_images / images.shape[0]).backward()
 
         avg_loss += loss / train_set.num_images
 
