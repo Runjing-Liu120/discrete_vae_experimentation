@@ -54,7 +54,7 @@ class CIFARConditionalVAE(nn.Module):
         self.decoder = nn.Sequential(
             self._deconv(kernel_num, kernel_num // 2),
             self._deconv(kernel_num // 2, kernel_num // 4),
-            self._deconv(kernel_num // 4, channel_num),
+            self._deconv(kernel_num // 4, channel_num, relu = False),
             nn.Sigmoid()
         )
 
@@ -198,15 +198,26 @@ class CIFARConditionalVAE(nn.Module):
             nn.ReLU(),
         )
 
-    def _deconv(self, channel_num, kernel_num):
-        return nn.Sequential(
-            nn.ConvTranspose2d(
-                channel_num, kernel_num,
-                kernel_size=4, stride=2, padding=1,
-            ),
-            nn.BatchNorm2d(kernel_num),
-            nn.ReLU(),
-        )
+    def _deconv(self, channel_num, kernel_num, relu = True):
+
+        if relu:
+            return nn.Sequential(
+                nn.ConvTranspose2d(
+                    channel_num, kernel_num,
+                    kernel_size=4, stride=2, padding=1,
+                ),
+                nn.BatchNorm2d(kernel_num),
+                nn.ReLU(),
+            )
+        else:
+            return nn.Sequential(
+                nn.ConvTranspose2d(
+                    channel_num, kernel_num,
+                    kernel_size=4, stride=2, padding=1,
+                ),
+                nn.BatchNorm2d(kernel_num),
+            )
+
 
     def _linear(self, in_size, out_size, relu=True):
         return nn.Sequential(
