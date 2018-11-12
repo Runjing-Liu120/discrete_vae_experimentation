@@ -386,9 +386,9 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
                 data_labeld_r = pickle.load(f)
 
             vae.eval()
-            print('debugging loss: ', vae.get_conditional_loss(data_labeld_r['image'].to(device), data_labeld_r['label'].to(device)))
-            image_mu, z_ind = get_reconstructions(vae, data_labeld_r['image'].to(device), labels = data_labeld_r['label'].to(device))
-            print('debug recon means', np.unique(image_mu.cpu().detach().numpy().flatten()))
+            print('debugging loss: ', vae.get_conditional_loss(data_labeld_r['image'].to(device), data_labeld_r['label'].to(device)).mean())
+            # image_mu, z_ind = get_reconstructions(vae, data_labeld_r['image'].to(device), labels = data_labeld_r['label'].to(device))
+            # print('debug recon means', np.unique(image_mu.cpu().detach().numpy().flatten()))
 
 
 
