@@ -375,6 +375,17 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
             print("writing the classifier parameters to " + outfile_every + '\n')
             torch.save(vae.classifier.state_dict(), outfile_every)
 
+            # DEBUGGING
+            for batch_idx, d in enumerate(train_loader_labeled):
+                data_labeled = d
+                break
+
+            print('debugging loss: ', vae.get_conditional_loss(data_labeled['image'], data_labeled['label']))
+            image_mu, z_ind = get_reconstructions(vae, data_labeled['image'], labels = labels))
+            print('debug recon means', np.unique(image_mu.cpu().detach().numpy().flatten()))
+
+
+
             loss_array = np.zeros((5, len(iter_array)))
             loss_array[0, :] = iter_array
             loss_array[1, :] = train_loss_array

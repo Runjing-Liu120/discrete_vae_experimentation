@@ -111,8 +111,9 @@ def get_cifar_semisuperivsed_vae(image_config = {'slen': 32,
                                 k = classifier_config['k'],
                                 n_classes = image_config['n_classes'],
                                 slen = image_config['slen'])
+
     cifar_spec_loglik = lambda image, image_mean, image_var : \
                                 cifar_loglik(image, image_mean, image_var,
                                                 image_config['n_classes'])
 
-    return ss_vae_lib.SemiSupervisedVAE(cond_vae, classifier, cifar_loglik)
+    return ss_vae_lib.SemiSupervisedVAE(cond_vae, classifier, cifar_spec_loglik)

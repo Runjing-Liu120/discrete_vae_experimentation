@@ -143,9 +143,13 @@ def unpickle(file):
         dict = pickle.load(fo, encoding='bytes')
     return dict
 
-labels_legend_all = unpickle('../cifar100_data/cifar-100-python/meta')
-fine_labels_legend_ = labels_legend_all[b'fine_label_names']
-fine_labels_legend = [str(fine_labels_legend_[i])[2:-1] for i in range(len(fine_labels_legend_))]
+cifar100_labels_legend_all = unpickle('../cifar100_data/cifar-100-python/meta')
+cifar100_fine_labels_legend_ = cifar100_labels_legend_all[b'fine_label_names']
+cifar100_fine_labels_legend = [str(cifar100_fine_labels_legend_[i])[2:-1] for i in range(len(cifar100_fine_labels_legend_))]
+
+# cifar10_labels_legend_all = unpickle('../cifar10_data/cifar-10-python/meta')
+# cifar10_fine_labels_legend_ = cifar10_labels_legend_all[b'fine_label_names']
+# cifar10_fine_labels_legend = [str(cifar10_fine_labels_legend_[i])[2:-1] for i in range(len(cifar10_fine_labels_legend_))]
 
 def get_topk_labels(class_weights, topk):
     assert len(class_weights.shape) == 1, 'this is implemented only for a vector of class weights'
