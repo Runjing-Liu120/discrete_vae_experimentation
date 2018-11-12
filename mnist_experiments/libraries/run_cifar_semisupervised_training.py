@@ -34,7 +34,7 @@ parser.add_argument('--epochs', type=int, default=1000,
 parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
 
-parser.add_argument('--weight_decay', type = float, default = 1e-6)
+parser.add_argument('--weight_decay', type = float, default = 1e-5)
 parser.add_argument('--learning_rate', type = float, default = 0.001)
 
 parser.add_argument('--propn_labeled', type = float, default = 0.1,
@@ -162,7 +162,7 @@ print('num_test: ', test_set.num_images)
 
 # SET UP VAE
 print('setting up VAE: ')
-image_config = {'use_cifar100', args.use_cifar100,
+image_config = {'use_cifar100': args.use_cifar100,
                 'slen': 32,
                  'channel_num': 3,
                  'n_classes': n_classes}
