@@ -58,7 +58,7 @@ class CIFARConditionalVAE(nn.Module):
         self.decoder = nn.Sequential(
             self._deconv(kernel_num, kernel_num // 2),
             self._deconv(kernel_num // 2, kernel_num // 4),
-            self._deconv(kernel_num // 4, channel_num, relu = False),
+            self._deconv(kernel_num // 4, channel_num, relu = True),
             nn.Sigmoid()
         )
 
