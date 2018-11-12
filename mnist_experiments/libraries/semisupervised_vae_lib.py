@@ -21,6 +21,8 @@ from torch.optim import lr_scheduler
 
 from copy import deepcopy
 
+import pickle
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class SemiSupervisedVAE(nn.Module):
@@ -376,12 +378,11 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
             torch.save(vae.classifier.state_dict(), outfile_every)
 
             # DEBUGGING
-            for batch_idx, d in enumerate(train_loader_labeled):
-                data_labeled = d
-                break
+            with open('../jupyter/test_batch_cifar10.pkl', 'rb') as f:
+                data_labeld_r = pickle.load(f)
 
-            print('debugging loss: ', vae.get_conditional_loss(data_labeled['image'].to(device), data_labeled['label'].to(device)))
-            image_mu, z_ind = get_reconstructions(vae, data_labeled['image'].to(device), labels = data_labeled['label'].to(device))
+            print('debugging loss: ', vae.get_conditional_loss(data_labeld_r['image'].to(device), data_labeld_r['label'].to(device)))
+            image_mu, z_ind = get_reconstructions(vae, data_labeld_r['image'].to(device), labels = data_labeld_r['label'].to(device))
             print('debug recon means', np.unique(image_mu.cpu().detach().numpy().flatten()))
 
 
