@@ -13,7 +13,7 @@ from torch.utils.data import Dataset, DataLoader, sampler
 import mnist_data_lib
 import mnist_vae_lib
 import common_utils
-
+import se
 import distutils.util
 import argparse
 

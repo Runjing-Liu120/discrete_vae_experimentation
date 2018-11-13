@@ -173,6 +173,44 @@ class MLPConditionalDecoder(nn.Module):
 
         return image_mean # , image_std
 
+class MNISTConditionalVAE(nn.Module):
+
+    def __init__(self, encoder, decoder):
+        super(MNISTConditionalVAE, self).__init__()
+
+        self.encoder = encoder
+        self.decoder = decoder
+
+        assert self.encoder.latent_dim == self.decoder.latent_dim
+        assert self.encoder.n_classes == self.decoder.n_classes
+        assert self.encoder.slen == self.decoder.slen
+
+        # save some parameters
+        self.latent_dim = self.encoder.latent_dim
+        self.n_classes = self.encoder.n_classes
+        self.slen = self.encoder.slen
+
+    def forward(self, image, z):
+
+        one_hot_z = mnist_utils.get_one_hot_encoding_from_int(z, self.n_classes)
+
+        assert one_hot_z.shape[0] == image.shape[0]
+        assert one_hot_z.shape[1] == self.n_classes
+
+        latent_means, latent_std = self.encoder(image, one_hot_z)
+
+        latent_samples = torch.randn(latent_means.shape).to(device) * latent_std + latent_means
+
+        assert one_hot_z.shape[0] == latent_samples.shape[0]
+        assert one_hot_z.shape[1] == self.n_classes
+
+        image_mean = self.decoder(latent_samples, one_hot_z)
+        image_var = None
+
+        return latent_means, latent_std, latent_samples, image_mean, image_var
+
+def mnist_loglik(image, image_mean, image_var):
+    return mnist_utils.get_bernoulli_loglik(image_mean, image)
 
 def get_mnist_vae(latent_dim = 5,
                     n_classes = 10,
@@ -181,11 +219,11 @@ def get_mnist_vae(latent_dim = 5,
     encoder = MLPEncoder(latent_dim = latent_dim,
                             slen = slen,
                             n_classes = n_classes)
-
-    classifier = Classifier(n_classes = n_classes, slen = slen)
-
     decoder = MLPConditionalDecoder(latent_dim = latent_dim,
                                     slen = slen,
                                     n_classes = n_classes)
+    cond_vae = MNISTConditionalVAE(encoder, decoder)
 
-    return ss_vae_lib.SemiSupervisedVAE(encoder, decoder, classifier)
+    classifier = Classifier(n_classes = n_classes, slen = slen)
+
+    return ss_vae_lib.SemiSupervisedVAE(cond_vae, classifier, mnist_loglik)

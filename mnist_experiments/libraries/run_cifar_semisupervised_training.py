@@ -10,8 +10,10 @@ import json
 
 from torch.utils.data import Dataset, DataLoader, sampler
 
-import mnist_data_lib
-import mnist_vae_lib
+import cifar_data_utils
+import cifar_semisupervised_lib
+
+
 import common_utils
 import semisupervised_vae_lib as ss_vae_lib
 
@@ -21,10 +23,10 @@ import argparse
 
 parser = argparse.ArgumentParser(description='FullVAE')
 
-parser.add_argument('--mnist_data_dir', type = str,
-                    default='../mnist_data/')
-parser.add_argument('--latent_dim', type=int, default=5, metavar='N',
-                    help='latent dimension (default = 5)')
+parser.add_argument('--use_cifar100', type=distutils.util.strtobool, default='True')
+
+# parser.add_argument('--cifar_data_dir', type = str,
+#                     default='../cifar100_data/')
 
 # Training parameters
 parser.add_argument('--epochs', type=int, default=1000,
@@ -32,7 +34,7 @@ parser.add_argument('--epochs', type=int, default=1000,
 parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
 
-parser.add_argument('--weight_decay', type = float, default = 1e-6)
+parser.add_argument('--weight_decay', type = float, default = 1e-5)
 parser.add_argument('--learning_rate', type = float, default = 0.001)
 
 parser.add_argument('--propn_labeled', type = float, default = 0.1,
@@ -105,46 +107,83 @@ np.random.seed(args.seed)
 _ = torch.manual_seed(args.seed)
 
 # LOAD DATA
-print('Loading data')
-train_set_labeled, train_set_unlabeled, test_set = \
-    mnist_data_lib.get_mnist_dataset_semisupervised(propn_sample = args.propn_sample,
-                                                    propn_labeled = args.propn_labeled)
+if args.use_cifar100:
+    print('Loading cifar 100')
+    train_set_labeled, train_set_unlabeled, test_set = \
+        cifar_data_utils.load_semisupervised_cifar_dataset(
+                                        cifar100 = True,
+                                        data_dir = '../cifar100_data',
+                                        propn_sample = args.propn_sample,
+                                        propn_labeled = args.propn_labeled)
+
+    n_classes = 100
+else:
+    print('Loading cifar 10')
+    train_set_labeled, train_set_unlabeled, test_set = \
+        cifar_data_utils.load_semisupervised_cifar_dataset(
+                                        cifar100 = False,
+                                        data_dir = '../cifar10_data',
+                                        propn_sample = args.propn_sample,
+                                        propn_labeled = args.propn_labeled)
+
+    n_classes = 10
+
+if args.propn_labeled == 1:
+    print('all images are labeled. ')
+    train_loader_unlabeled = None
+    labeled_batchsize = args.batch_size
+else:
+    train_loader_unlabeled = torch.utils.data.DataLoader(
+                     dataset=train_set_unlabeled,
+                     batch_size=args.batch_size,
+                     shuffle=True)
+    print('num_train_unlabeled: \n', train_set_unlabeled.num_images)
+
+    labeled_batchsize = round(args.propn_labeled / (1 - args.propn_labeled))
+
+    print('len(train_loader_unlabeled): ', len(train_loader_unlabeled))
+
 
 train_loader_labeled = torch.utils.data.DataLoader(
                  dataset=train_set_labeled,
-                 batch_size=round(args.batch_size * (args.propn_labeled) / (1 - args.propn_labeled)),
+                 batch_size=labeled_batchsize,
                  shuffle=True)
-
-train_loader_unlabeled = torch.utils.data.DataLoader(
-                 dataset=train_set_unlabeled,
-                 batch_size=args.batch_size,
-                 shuffle=True)
+print('len(train_loader_labeled): ', len(train_loader_labeled))
 
 test_loader = torch.utils.data.DataLoader(
                 dataset=test_set,
                 batch_size=args.batch_size,
                 shuffle=False)
-#
-# for batch_idx, d in enumerate(train_loader_labeled):
-#     data_labeled = d
-#     break
-#
-print('num_train_labeled: ', train_set_labeled.num_images)
 
-print('num_train_unlabeled: \n', train_set_unlabeled.num_images)
+print('num_train_labeled: ', train_set_labeled.num_images)
+# print('check: \n', data_labeled['image'].shape[0])
 
 print('num_test: ', test_set.num_images)
 
 # SET UP VAE
-slen = train_set_unlabeled[0]['image'].shape[0]
-latent_dim = args.latent_dim
-n_classes = 10
-# vae = mnist_vae_lib.HandwritingVAE(latent_dim = latent_dim,
-#                             n_classes = n_classes,
-#                             slen = slen)
-vae = mnist_vae_lib.get_mnist_vae(latent_dim = latent_dim,
-                    n_classes = n_classes,
-                   slen = slen)
+print('setting up VAE: ')
+image_config = {'use_cifar100': args.use_cifar100,
+                'slen': 32,
+                 'channel_num': 3,
+                 'n_classes': n_classes}
+
+cond_vae_config = {'kernel_num': 128,
+                   'z_size': 128}
+
+# classifier_config = {'depth': 28,
+#                      'widen_factor': 1,
+#                      'dropout_rate': 0.3}
+classifier_config = {'depth': 100,
+                     'k': 12}
+
+print('image_config', image_config)
+print('cond_vae_config', cond_vae_config)
+print('classifier_config', classifier_config)
+
+vae = \
+    cifar_semisupervised_lib.get_cifar_semisuperivsed_vae(image_config,
+                                                            cond_vae_config,
+                                                            classifier_config)
 
 vae.to(device)
 if args.load_enc:
