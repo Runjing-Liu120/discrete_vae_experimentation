@@ -63,14 +63,20 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
     #             np.max(np.abs(class_weights.cpu().sum(1).numpy() - 1.0))
 
     # this is the indicator C_\alpha
-    concentrated_mask, topk_domain, seq_tensor = \
-        get_concentrated_mask(class_weights, alpha, topk)
-    concentrated_mask = concentrated_mask.float().detach()
+    # NOTE:
+    assert topk == 0
+    seq_tensor = torch.LongTensor([i for i in range(class_weights.shape[0])])
+    # concentrated_mask, topk_domain, seq_tensor = \
+    #     get_concentrated_mask(class_weights, alpha, topk)
+    # concentrated_mask = concentrated_mask.float().detach()
 
     # the summed term
     summed_term = 0.0
 
     for i in range(topk):
+        # NOTE: remove this
+        assert 1 == 2
+        
         summed_indx = topk_domain[:, i]
         f_z_i = f_z(summed_indx)
         assert len(f_z_i) == log_q.shape[0]
@@ -93,13 +99,16 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
                         class_weights[seq_tensor, summed_indx].squeeze()).sum()
 
     # sampled term
-    sampled_weight = torch.sum(class_weights * (1 - concentrated_mask), dim = 1, keepdim = True)
-
+    # NOTE:
+    # sampled_weight = torch.sum(class_weights * (1 - concentrated_mask), dim = 1, keepdim = True)
+    sampled_weight = torch.ones((class_weights.shape[0], 1))
     if not(topk == class_weights.shape[1]):
-        conditional_class_weights = \
-            class_weights * (1 - concentrated_mask) / (sampled_weight)
+        # NOTE:
+        # conditional_class_weights = \
+        #     class_weights * (1 - concentrated_mask) / (sampled_weight)
 
-        conditional_z_sample = common_utils.sample_class_weights(conditional_class_weights)
+        # conditional_z_sample = common_utils.sample_class_weights(conditional_class_weights)
+        conditional_z_sample = common_utils.sample_class_weights(class_weights)
         # print(conditional_z_sample)
 
         # just for my own sanity ...
