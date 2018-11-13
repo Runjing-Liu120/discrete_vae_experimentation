@@ -14,58 +14,77 @@ from torch.utils.data.sampler import Sampler
 
 import numpy as np
 
-CIFAR_MEAN = (0.5071, 0.4867, 0.4408)
-CIFAR_STD = (0.2675, 0.2565, 0.2761)
+CIFAR100_MEAN = (0.5071, 0.4867, 0.4408)
+CIFAR100_STD = (0.2675, 0.2565, 0.2761)
 
-CIFAR_MEAN_TENSOR = torch.Tensor([0.5071, 0.4867, 0.4408]).view(3, 1, 1)
-CIFAR_STD_TENSOR = torch.Tensor([0.2675, 0.2565, 0.2761]).view(3, 1, 1)
+CIFAR100_MEAN_TENSOR = torch.Tensor([0.5071, 0.4867, 0.4408]).view(3, 1, 1)
+CIFAR100_STD_TENSOR = torch.Tensor([0.2675, 0.2565, 0.2761]).view(3, 1, 1)
+
+CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
+CIFAR10_STD = (0.2023, 0.1994, 0.2010)
+
+CIFAR10_MEAN_TENSOR = torch.Tensor([0.4914, 0.4822, 0.4465]).view(3, 1, 1)
+CIFAR10_STD_TENSOR = torch.Tensor([0.2023, 0.1994, 0.2010]).view(3, 1, 1)
 
 
-def load_cifar100_data(data_dir = '../cifar100_data/', train = True):
+
+def load_cifar_data(cifar100 = True, data_dir = '../cifar100_data/',
+                    train = True):
     # adapted from
     # https://github.com/meliketoy/wide-resnet.pytorch/blob/master/main.py
 
     assert os.path.exists(data_dir)
+
+    if cifar100:
+        cifar_mean, cifar_std = (CIFAR100_MEAN, CIFAR100_STD)
+    else:
+        cifar_mean, cifar_std = (CIFAR10_MEAN, CIFAR10_STD)
 
     if train:
         transform = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+            transforms.Normalize(cifar_mean, cifar_std),
         ]) # meanstd transformation
     else:
         transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+            transforms.Normalize(cifar_mean, cifar_std),
         ])
 
-    print("| Preparing CIFAR-100 dataset...")
+    print("| Preparing CIFAR dataset...")
     # sys.stdout.write("| ")
-    cifar_data = dset.CIFAR100(root=data_dir, train=train,
-                                download=True, transform=transform)
+    if cifar100:
+        cifar_data = dset.CIFAR100(root=data_dir, train=train,
+                                    download=True, transform=transform)
+    else:
+        cifar_data = dset.CIFAR10(root=data_dir, train=train,
+                                    download=True, transform=transform)
 
     return cifar_data
 
-class CIFAR100DataSet(Dataset):
+class CIFARDataSet(Dataset):
 
-    def __init__(self, data_dir = '../cifar100_data/',
+    def __init__(self, cifar100, data_dir,
                     propn_sample = 1.0,
                     indices = None,
                     train_set = True):
 
-        super(CIFAR100DataSet, self).__init__()
+        super(CIFARDataSet, self).__init__()
 
         # Load MNIST dataset
         assert os.path.exists(data_dir)
 
         # This is the full dataset
-        self.cifar100_dataset = load_cifar100_data(data_dir = data_dir, train = train_set)
+        self.cifar_dataset = load_cifar_data(cifar100,
+                                            data_dir = data_dir,
+                                            train = train_set)
 
         if train_set:
-            n_image_full = len(self.cifar100_dataset.train_labels)
+            n_image_full = len(self.cifar_dataset.train_labels)
         else:
-            n_image_full = len(self.cifar100_dataset.test_labels)
+            n_image_full = len(self.cifar_dataset.test_labels)
 
         # we may wish to subset
         if indices is None:
@@ -79,12 +98,13 @@ class CIFAR100DataSet(Dataset):
         return self.num_images
 
     def __getitem__(self, idx):
-        return {'image' : self.cifar100_dataset[self.sample_indx[idx]][0].squeeze(),
-                'label' : self.cifar100_dataset[self.sample_indx[idx]][1]}
+        return {'image' : self.cifar_dataset[self.sample_indx[idx]][0].squeeze(),
+                'label' : self.cifar_dataset[self.sample_indx[idx]][1]}
 
 
-def load_semisupervised_cifar_dataset(data_dir = '../cifar100_data/',
-                    propn_sample = 1.0, propn_labeled = 0.1):
+def load_semisupervised_cifar_dataset(cifar100, data_dir,
+                                        propn_sample = 1.0,
+                                        propn_labeled = 0.1):
 
     total_num_train_images = 50000 # is there way to read this in?
 
@@ -96,18 +116,18 @@ def load_semisupervised_cifar_dataset(data_dir = '../cifar100_data/',
 
     # split training set into labeled and unlabled images
     num_labeled_images = round(num_train_images * propn_labeled)
-    train_set_labeled = CIFAR100DataSet(data_dir = data_dir,
+    train_set_labeled = CIFARDataSet(cifar100, data_dir = data_dir,
                             indices = subs_train_set[:num_labeled_images],
                             train_set = True)
     if propn_labeled == 1:
         train_set_unlabeled = None
     else:
-        train_set_unlabeled = CIFAR100DataSet(data_dir = data_dir,
+        train_set_unlabeled = CIFARDataSet(cifar100, data_dir = data_dir,
                                 indices = subs_train_set[num_labeled_images:],
                                 train_set = True)
 
     # get test set as usual
-    test_set = CIFAR100DataSet(data_dir = data_dir,
+    test_set = CIFARDataSet(cifar100, data_dir = data_dir,
                             propn_sample = propn_sample,
                             train_set = False)
 
@@ -115,7 +135,7 @@ def load_semisupervised_cifar_dataset(data_dir = '../cifar100_data/',
 
 
 # Functions to examine class accuracies and reconstruction_loss
-
+# TODO: this only works for cifar-100 at the moment.
 # LOAD TRUE LABELS
 def unpickle(file):
     import pickle
@@ -123,9 +143,13 @@ def unpickle(file):
         dict = pickle.load(fo, encoding='bytes')
     return dict
 
-labels_legend_all = unpickle('../cifar100_data/cifar-100-python/meta')
-fine_labels_legend_ = labels_legend_all[b'fine_label_names']
-fine_labels_legend = [str(fine_labels_legend_[i])[2:-1] for i in range(len(fine_labels_legend_))]
+cifar100_labels_legend_all = unpickle('../cifar100_data/cifar-100-python/meta')
+cifar100_fine_labels_legend_ = cifar100_labels_legend_all[b'fine_label_names']
+cifar100_fine_labels_legend = [str(cifar100_fine_labels_legend_[i])[2:-1] for i in range(len(cifar100_fine_labels_legend_))]
+
+# cifar10_labels_legend_all = unpickle('../cifar10_data/cifar-10-python/meta')
+# cifar10_fine_labels_legend_ = cifar10_labels_legend_all[b'fine_label_names']
+# cifar10_fine_labels_legend = [str(cifar10_fine_labels_legend_[i])[2:-1] for i in range(len(cifar10_fine_labels_legend_))]
 
 def get_topk_labels(class_weights, topk):
     assert len(class_weights.shape) == 1, 'this is implemented only for a vector of class weights'

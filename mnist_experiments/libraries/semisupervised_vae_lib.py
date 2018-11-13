@@ -21,6 +21,8 @@ from torch.optim import lr_scheduler
 
 from copy import deepcopy
 
+import pickle
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class SemiSupervisedVAE(nn.Module):
@@ -363,17 +365,32 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
             # test_class_accuracy_array.append(test_class_accuracy.detach().cpu().numpy())
 
         if epoch % save_every == 0:
-            outfile_every = outfile + '_enc_epoch' + str(epoch)
-            print("writing the encoder parameters to " + outfile_every + '\n')
-            torch.save(vae.conditional_vae.encoder.state_dict(), outfile_every)
+            # outfile_every = outfile + '_enc_epoch' + str(epoch)
+            # print("writing the encoder parameters to " + outfile_every + '\n')
+            # torch.save(vae.conditional_vae.encoder.state_dict(), outfile_every)
+            #
+            # outfile_every = outfile + '_dec_epoch' + str(epoch)
+            # print("writing the decoder parameters to " + outfile_every + '\n')
+            # torch.save(vae.conditional_vae.decoder.state_dict(), outfile_every)
 
-            outfile_every = outfile + '_dec_epoch' + str(epoch)
-            print("writing the decoder parameters to " + outfile_every + '\n')
-            torch.save(vae.conditional_vae.decoder.state_dict(), outfile_every)
+            outfile_every = outfile + '_cond_vae_epoch' + str(epoch)
+            print("writing the conditional_vae parameters to " + outfile_every + '\n')
+            torch.save(vae.conditional_vae.state_dict(), outfile_every)
 
             outfile_every = outfile + '_classifier_epoch' + str(epoch)
             print("writing the classifier parameters to " + outfile_every + '\n')
             torch.save(vae.classifier.state_dict(), outfile_every)
+
+            # DEBUGGING
+            with open('../cifar10_data/test_batch_cifar10.pkl', 'rb') as f:
+                data_labeld_r = pickle.load(f)
+
+            vae.eval()
+            print('debugging loss: ', vae.get_conditional_loss(data_labeld_r['image'].to(device), data_labeld_r['label'].to(device)).mean())
+            # image_mu, z_ind = get_reconstructions(vae, data_labeld_r['image'].to(device), labels = data_labeld_r['label'].to(device))
+            # print('debug recon means', np.unique(image_mu.cpu().detach().numpy().flatten()))
+
+
 
             loss_array = np.zeros((5, len(iter_array)))
             loss_array[0, :] = iter_array
@@ -386,13 +403,17 @@ def train_semisupervised_model(vae, train_loader_unlabeled, train_loader_labeled
 
 
     if save_final_enc:
-        outfile_final = outfile + '_enc_final'
-        print("writing the encoder parameters to " + outfile_final + '\n')
-        torch.save(vae.conditional_vae.encoder.state_dict(), outfile_final)
+        # outfile_final = outfile + '_enc_final'
+        # print("writing the encoder parameters to " + outfile_final + '\n')
+        # torch.save(vae.conditional_vae.encoder.state_dict(), outfile_final)
+        #
+        # outfile_final = outfile + '_dec_final'
+        # print("writing the decoder parameters to " + outfile_final + '\n')
+        # torch.save(vae.conditional_vae.decoder.state_dict(), outfile_final)
 
-        outfile_final = outfile + '_dec_final'
-        print("writing the decoder parameters to " + outfile_final + '\n')
-        torch.save(vae.conditional_vae.decoder.state_dict(), outfile_final)
+        outfile_every = outfile + '_cond_vae_final'
+        print("writing the conditional_vae parameters to " + outfile_every + '\n')
+        torch.save(vae.conditional_vae.state_dict(), outfile_every)
 
         outfile_final = outfile + '_classifier_final'
         print("writing the classifier parameters to " + outfile_final + '\n')

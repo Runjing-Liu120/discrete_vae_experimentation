@@ -4,12 +4,14 @@ from torch import nn
 
 import mnist_utils
 
+import cifar_data_utils
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # code adapted from https://github.com/kuc2477/pytorch-vae/blob/master/model.py
 
 class CIFARConditionalVAE(nn.Module):
-    def __init__(self, slen, channel_num, kernel_num, z_size, n_classes):
+    def __init__(self, slen, channel_num, kernel_num, z_size, n_classes, use_cifar100 = True):
         # configurations
         super().__init__()
         self.slen = slen # side length of image
@@ -18,6 +20,8 @@ class CIFARConditionalVAE(nn.Module):
         self.z_size = z_size # size of latent dimension
 
         self.n_classes = n_classes
+
+        self.use_cifar100 = use_cifar100
 
         # encoder
         self.encoder = nn.Sequential(
@@ -54,7 +58,7 @@ class CIFARConditionalVAE(nn.Module):
         self.decoder = nn.Sequential(
             self._deconv(kernel_num, kernel_num // 2),
             self._deconv(kernel_num // 2, kernel_num // 4),
-            self._deconv(kernel_num // 4, channel_num),
+            self._deconv(kernel_num // 4, channel_num, relu = True),
             nn.Sigmoid()
         )
 
@@ -97,6 +101,14 @@ class CIFARConditionalVAE(nn.Module):
 
         # encode x
         # this is (N x kernel_num x (slen / 8) x (slen / 8))
+        if self.use_cifar100:
+            x = x * cifar_data_utils.CIFAR100_STD_TENSOR.to(device) + \
+                        cifar_data_utils.CIFAR100_MEAN_TENSOR.to(device)
+
+        else:
+            x = x * cifar_data_utils.CIFAR10_STD_TENSOR.to(device) + \
+                        cifar_data_utils.CIFAR10_MEAN_TENSOR.to(device)
+
         encoded = self.encoder(x)
 
         assert encoded.shape[0] == n_obs
@@ -198,15 +210,26 @@ class CIFARConditionalVAE(nn.Module):
             nn.ReLU(),
         )
 
-    def _deconv(self, channel_num, kernel_num):
-        return nn.Sequential(
-            nn.ConvTranspose2d(
-                channel_num, kernel_num,
-                kernel_size=4, stride=2, padding=1,
-            ),
-            nn.BatchNorm2d(kernel_num),
-            nn.ReLU(),
-        )
+    def _deconv(self, channel_num, kernel_num, relu = True):
+
+        if relu:
+            return nn.Sequential(
+                nn.ConvTranspose2d(
+                    channel_num, kernel_num,
+                    kernel_size=4, stride=2, padding=1,
+                ),
+                nn.BatchNorm2d(kernel_num),
+                nn.ReLU(),
+            )
+        else:
+            return nn.Sequential(
+                nn.ConvTranspose2d(
+                    channel_num, kernel_num,
+                    kernel_size=4, stride=2, padding=1,
+                ),
+                nn.BatchNorm2d(kernel_num),
+            )
+
 
     def _linear(self, in_size, out_size, relu=True):
         return nn.Sequential(

@@ -23,8 +23,10 @@ import argparse
 
 parser = argparse.ArgumentParser(description='FullVAE')
 
-parser.add_argument('--cifar_data_dir', type = str,
-                    default='../cifar100_data/')
+parser.add_argument('--use_cifar100', type=distutils.util.strtobool, default='True')
+
+# parser.add_argument('--cifar_data_dir', type = str,
+#                     default='../cifar100_data/')
 
 # Training parameters
 parser.add_argument('--epochs', type=int, default=1000,
@@ -32,7 +34,7 @@ parser.add_argument('--epochs', type=int, default=1000,
 parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
 
-parser.add_argument('--weight_decay', type = float, default = 1e-6)
+parser.add_argument('--weight_decay', type = float, default = 1e-5)
 parser.add_argument('--learning_rate', type = float, default = 0.001)
 
 parser.add_argument('--propn_labeled', type = float, default = 0.1,
@@ -105,10 +107,26 @@ np.random.seed(args.seed)
 _ = torch.manual_seed(args.seed)
 
 # LOAD DATA
-print('Loading data')
-train_set_labeled, train_set_unlabeled, test_set = \
-    cifar_data_utils.load_semisupervised_cifar_dataset(propn_sample = args.propn_sample,
-                                                    propn_labeled = args.propn_labeled)
+if args.use_cifar100:
+    print('Loading cifar 100')
+    train_set_labeled, train_set_unlabeled, test_set = \
+        cifar_data_utils.load_semisupervised_cifar_dataset(
+                                        cifar100 = True,
+                                        data_dir = '../cifar100_data',
+                                        propn_sample = args.propn_sample,
+                                        propn_labeled = args.propn_labeled)
+
+    n_classes = 100
+else:
+    print('Loading cifar 10')
+    train_set_labeled, train_set_unlabeled, test_set = \
+        cifar_data_utils.load_semisupervised_cifar_dataset(
+                                        cifar100 = False,
+                                        data_dir = '../cifar10_data',
+                                        propn_sample = args.propn_sample,
+                                        propn_labeled = args.propn_labeled)
+
+    n_classes = 10
 
 if args.propn_labeled == 1:
     print('all images are labeled. ')
@@ -144,9 +162,10 @@ print('num_test: ', test_set.num_images)
 
 # SET UP VAE
 print('setting up VAE: ')
-image_config = {'slen': 32,
+image_config = {'use_cifar100': args.use_cifar100,
+                'slen': 32,
                  'channel_num': 3,
-                 'n_classes': 100}
+                 'n_classes': n_classes}
 
 cond_vae_config = {'kernel_num': 128,
                    'z_size': 128}
