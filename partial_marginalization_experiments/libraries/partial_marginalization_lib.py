@@ -26,7 +26,7 @@ def get_concentrated_mask(class_weights, alpha, topk):
     # NOTE: this only works for a vector of class_weights at the moment.
 
     # boolean vector for where class_weights > alpha
-    mask_alpha = (class_weights >= alpha).float().detach()
+    # mask_alpha = (class_weights >= alpha).float().detach()
 
     # but if there are more than k, only take the topk
     mask_topk = torch.zeros(class_weights.shape).to(device)
@@ -42,7 +42,7 @@ def get_concentrated_mask(class_weights, alpha, topk):
     else:
         topk_domain = None
 
-    return mask_alpha * mask_topk, topk_domain, seq_tensor
+    return mask_topk, topk_domain, seq_tensor
 
 def get_full_loss(f_z, class_weights):
 
@@ -103,8 +103,8 @@ def get_partial_marginal_loss(f_z, log_q, alpha, topk,
         # print(conditional_z_sample)
 
         # just for my own sanity ...
-        assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].cpu().numpy() == 1.), \
-                    'sampled_weight {}'.format(sampled_weight)
+        # assert np.all((1 - concentrated_mask)[seq_tensor, conditional_z_sample].cpu().numpy() == 1.), \
+        #             'sampled_weight {}'.format(sampled_weight)
 
         f_z_i_sample = f_z(conditional_z_sample)
         log_q_i_sample = log_q[seq_tensor, conditional_z_sample]
