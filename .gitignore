@@ -4,3 +4,4 @@ mnist_vae_results/
 */cifar100_data/*
 */cifar10_data/*
 */cifar_vae_results/*
+*/datasets/*
