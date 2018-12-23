@@ -85,7 +85,7 @@ class HandwritingVAE(nn.Module):
         latent_mean, latent_log_std = self.encoder(image)
 
         # sample latent params
-        latent_params = torch.randn(latent_mean.shape) * \
+        latent_params = torch.randn(latent_mean.shape).to(device) * \
                             torch.exp(latent_log_std) + latent_mean
 
         # pass through decoder

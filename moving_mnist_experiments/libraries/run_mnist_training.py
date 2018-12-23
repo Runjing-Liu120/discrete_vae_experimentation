@@ -8,6 +8,7 @@ import time
 
 import mnist_data_utils
 import mnist_vae_lib
+import argparse
 
 parser = argparse.ArgumentParser(description='VAE')
 
