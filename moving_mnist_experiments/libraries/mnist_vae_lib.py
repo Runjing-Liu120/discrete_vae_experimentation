@@ -101,7 +101,7 @@ class HandwritingVAE(nn.Module):
         # bernoulli likelihood
         loglik = modeling_lib.get_bernoulli_loglik(recon_mean, image)
 
-        return loglik + kl_q
+        return -loglik + kl_q
 
     def eval_vae(self, loader, \
                     optimizer = None,
