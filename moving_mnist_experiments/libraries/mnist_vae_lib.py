@@ -103,80 +103,160 @@ class HandwritingVAE(nn.Module):
 
         return -loglik + kl_q
 
-    def eval_vae(self, loader, \
-                    optimizer = None,
-                    train = False):
+
+class Flatten(nn.Module):
+    def forward(self, tensor):
+        return tensor.view(tensor.size(0), -1)
+
+class PixelAttention(nn.Module):
+    def __init__(self, slen):
+
+        super(PixelAttention, self).__init__()
+
+        # attention mechanism
+
+        # convolution layers
+        self.attn = nn.Sequential(
+            nn.Conv2d(1, 7, 3, padding=0),
+            nn.ReLU(),
+
+            nn.Conv2d(7, 7, 3, padding=0),
+            nn.ReLU(),
+
+            nn.Conv2d(7, 7, 3, padding=0),
+            nn.ReLU(),
+
+            nn.Conv2d(7, 1, 3, padding=0),
+            Flatten())
+
+        # one more fully connected layer
+        self.slen = slen
+        self.fc1 = nn.Linear((self.slen - 4)**2, selfslen**2)
+
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, image):
+        h = self.attn(image)
+        h = self.fc1(h)
+
+        return self.softmax(h)
+
+class MovingHandwritingVAE(nn.Module):
+    def __init__(self, latent_dim = 5,
+                        mnist_slen = 28,
+                        padded_slen = 68):
+
+        super(MovingHandwritingVAE, self).__init__()
+
+        self.latent_dim = latent_dim
+        self.mnist_slen = mnist_slen
+        self.padded_slen = padded_slen
+
+        self.mnist_vae = HandwritingVAE(latent_dim = self.latent_dim,
+                                        slen = self.mnist_slen)
+
+        self.pixel_attention = PixelAttention(slen = padded_slen)
+
+    def forward(self, image):
+        # image should be N x slen x slen
+        assert len(image.shape) == 3
+        assert image.shape[1] == self.slen
+        assert image.shape[2] == self.slen
+
+        image_ 
+
+        # get latent means and std
+        latent_mean, latent_log_std = self.encoder(image)
+
+        # sample latent params
+        latent_params = torch.randn(latent_mean.shape).to(device) * \
+                            torch.exp(latent_log_std) + latent_mean
+
+        # pass through decoder
+        recon_mean = self.decoder(latent_params)
+
+        return recon_mean, latent_mean, latent_log_std, latent_params
+
+    def get_loss(self, image, recon_mean, latent_mean, latent_log_std):
+
+        # kl term
+        kl_q = modeling_lib.get_kl_q_standard_normal(latent_mean, latent_log_std)
+
+        # bernoulli likelihood
+        loglik = modeling_lib.get_bernoulli_loglik(recon_mean, image)
+
+        return -loglik + kl_q
+
+
+def eval_vae(vae, loader, \
+                optimizer = None,
+                train = False):
+    if train:
+        vae.train()
+        assert optimizer is not None
+    else:
+        vae.eval()
+
+    avg_loss = 0.0
+
+    num_images = len(loader.dataset)
+
+    for batch_idx, data in enumerate(loader):
+
+        if optimizer is not None:
+            optimizer.zero_grad()
+
+        image = data['image'].to(device)
+
+        recon_mean, latent_mean, latent_log_std, latent_params = \
+            vae.forward(image)
+
+        loss = vae.get_loss(image, recon_mean,
+                            latent_mean, latent_log_std).sum()
+
         if train:
-            self.train()
-            assert optimizer is not None
-        else:
-            self.eval()
+            loss.backward()
+            optimizer.step()
 
-        avg_loss = 0.0
+        avg_loss += loss.data  / num_images
 
-        num_images = len(loader.dataset)
+    return avg_loss
 
-        for batch_idx, data in enumerate(loader):
+def train_vae(vae, train_loader, test_loader, optimizer,
+                    outfile = './mnist_vae_semisupervised',
+                    n_epoch = 200, print_every = 10, save_every = 20,
+                    weight_decay = 1e-6, lr = 0.001):
 
-            if optimizer is not None:
-                optimizer.zero_grad()
+    # get losses
+    train_loss = eval_vae(vae, train_loader, train = False)
+    test_loss = eval_vae(vae, test_loader, train = False)
 
-            image = data['image'].to(device)
+    print('  * init train recon loss: {:.10g};'.format(train_loss))
+    print('  * init test recon loss: {:.10g};'.format(test_loss))
 
-            recon_mean, latent_mean, latent_log_std, latent_params = \
-                self.forward(image)
+    for epoch in range(1, n_epoch + 1):
+        start_time = timeit.default_timer()
 
-            loss = self.get_loss(image, recon_mean,
-                                latent_mean, latent_log_std).sum()
+        loss = eval_vae(vae, train_loader,
+                                optimizer = optimizer,
+                                train = True)
 
-            if train:
-                loss.backward()
-                optimizer.step()
+        elapsed = timeit.default_timer() - start_time
+        print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
+                    epoch, loss, elapsed))
 
-            avg_loss += loss.data  / num_images
+        if epoch % print_every == 0:
+            train_loss = eval_vae(vae, train_loader, train = False)
+            test_loss = eval_vae(vae, test_loader, train = False)
 
-        return avg_loss
+            print('  * train recon loss: {:.10g};'.format(train_loss))
+            print('  * test recon loss: {:.10g};'.format(test_loss))
 
-    def train_vae(self, train_loader, test_loader,
-                        outfile = './mnist_vae_semisupervised',
-                        n_epoch = 200, print_every = 10, save_every = 20,
-                        weight_decay = 1e-6, lr = 0.001):
+        if epoch % save_every == 0:
+            outfile_every = outfile + '_epoch' + str(epoch)
+            print("writing the parameters to " + outfile_every + '\n')
+            torch.save(vae.state_dict(), outfile_every)
 
-        # define optimizer
-        optimizer = optim.Adam([
-                    {'params': self.parameters(), 'lr': lr}],
-                        weight_decay=weight_decay)
-
-        # get losses
-        train_loss = self.eval_vae(train_loader, train = False)
-        test_loss = self.eval_vae(test_loader, train = False)
-
-        print('  * init train recon loss: {:.10g};'.format(train_loss))
-        print('  * init test recon loss: {:.10g};'.format(test_loss))
-
-        for epoch in range(1, n_epoch + 1):
-            start_time = timeit.default_timer()
-
-            loss = self.eval_vae(train_loader,
-                                    optimizer = optimizer,
-                                    train = True)
-
-            elapsed = timeit.default_timer() - start_time
-            print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
-                        epoch, loss, elapsed))
-
-            if epoch % print_every == 0:
-                train_loss = self.eval_vae(train_loader, train = False)
-                test_loss = self.eval_vae(test_loader, train = False)
-
-                print('  * train recon loss: {:.10g};'.format(train_loss))
-                print('  * test recon loss: {:.10g};'.format(test_loss))
-
-            if epoch % save_every == 0:
-                outfile_every = outfile + '_epoch' + str(epoch)
-                print("writing the parameters to " + outfile_every + '\n')
-                torch.save(self.state_dict(), outfile_every)
-
-        outfile_final = outfile + '_final'
-        print("writing the parameters to " + outfile_final + '\n')
-        torch.save(self.state_dict(), outfile_final)
+    outfile_final = outfile + '_final'
+    print("writing the parameters to " + outfile_final + '\n')
+    torch.save(vae.state_dict(), outfile_final)
