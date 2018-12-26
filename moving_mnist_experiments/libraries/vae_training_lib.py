@@ -36,10 +36,10 @@ def eval_vae(vae, loader, \
         else:
             true_pixel_2d = None
 
-        loss = vae.get_loss(image, true_pixel_2d = true_pixel_2d).sum()
+        pm_loss, loss = vae.get_pm_loss(image)
 
         if train:
-            loss.backward()
+            pm_loss.backward()
             optimizer.step()
 
         avg_loss += loss.data  / num_images

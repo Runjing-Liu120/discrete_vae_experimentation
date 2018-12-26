@@ -14,6 +14,11 @@ import timeit
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+import sys
+sys.path.insert(0, '../../partial_marginalization_experiments/libraries/')
+import partial_marginalization_lib as pm_lib
+
+
 class MLPEncoder(nn.Module):
     def __init__(self, latent_dim = 5,
                     slen = 28):
@@ -183,56 +188,69 @@ class MovingHandwritingVAE(nn.Module):
         return mnist_data_utils.crop_image(image,
                             pixel_2d, grid0 = self.grid0)
 
-    def forward(self, image, true_pixel_2d = None):
+    def forward_cond_pixel_1d(self, image, pixel_1d):
         # image should be N x slen x slen
         assert len(image.shape) == 4
         assert image.shape[1] == 1
         assert image.shape[2] == self.full_slen
         assert image.shape[3] == self.full_slen
 
-        if true_pixel_2d is None:
-            # the pixel where to attend.
-            # the CNN requires a 4D input.
-            pixel_probs = self.pixel_attention(image)
+        pixel_2d = mnist_data_utils.pixel_1d_to_2d(self.full_slen,
+                                    padding = 0,
+                                    pixel_1d = pixel_1d)
 
-            # sample pixel
-            categorical = Categorical(pixel_probs)
-            pixel_1d_sample = categorical.sample().detach()
-
-            # crop image about sampled pixel
-            pixel_2d_sample = mnist_data_utils.pixel_1d_to_2d(self.full_slen,
-                                        padding = 0,
-                                        pixel_1d = pixel_1d_sample)
-        else:
-            assert true_pixel_2d.shape[0] == image.shape[0]
-            pixel_2d_sample = true_pixel_2d
-            pixel_probs = torch.Tensor([[1]]).to(device)
-
-        image_cropped = self.crop_image(image, pixel_2d_sample)
+        image_cropped = self.crop_image(image, pixel_2d)
 
         # pass through mnist vae
         recon_mean_cropped, latent_mean, latent_log_std, latent_samples = \
             self.mnist_vae(image_cropped)
 
-        recon_mean = self.pad_image(recon_mean_cropped, pixel_2d_sample)
+        recon_mean = self.pad_image(recon_mean_cropped, pixel_2d)
 
-        return recon_mean, latent_mean, latent_log_std, latent_samples, \
-                    pixel_probs, pixel_2d_sample
+        return recon_mean, latent_mean, latent_log_std, latent_samples, pixel_2d
 
-    def get_loss(self, image, true_pixel_2d = None):
+    def get_loss_cond_pixel_1d(self, image, pixel_1d):
 
         # forward
-        recon_mean, latent_mean, latent_log_std, latent_samples, \
-                    pixel_probs, pixel_2d_sample = \
-                        self.forward(image, true_pixel_2d = true_pixel_2d)
+        recon_mean, latent_mean, latent_log_std, latent_samples, pixel_2d = \
+                        self.forward_cond_pixel_1d(image, pixel_1d)
 
         # kl term
         kl_latent = \
             modeling_lib.get_kl_q_standard_normal(latent_mean, latent_log_std)
-        kl_pixel_probs = \
-            modeling_lib.get_multinomial_kl(pixel_probs)
 
         # bernoulli likelihood
         loglik = modeling_lib.get_bernoulli_loglik(recon_mean, image)
 
-        return -loglik + kl_latent + kl_pixel_probs
+        return -loglik + kl_latent
+
+    def get_pm_loss(self, image,
+                        alpha = 0.0,
+                        topk = 0,
+                        use_baseline = True,
+                        use_term_one_baseline = True,
+                        n_samples = 1):
+
+        class_weights = self.pixel_attention(image)
+        log_q = torch.log(class_weights)
+
+        # kl term
+        kl_pixel_probs = (class_weights * log_q).sum()
+
+        f_pixel = lambda i : self.get_loss_cond_pixel_1d(image, i) + \
+                    kl_pixel_probs
+
+        avg_pm_loss = 0.0
+        # TODO: n_samples would be more elegant as an
+        # argument to get_partial_marginal_loss
+        for k in range(n_samples):
+            pm_loss = pm_lib.get_partial_marginal_loss(f_pixel, log_q, alpha, topk,
+                                        use_baseline = use_baseline,
+                                        use_term_one_baseline = use_term_one_baseline)
+
+            avg_pm_loss += pm_loss / n_samples
+
+        map_locations = torch.argmax(log_q.detach(), dim = 1)
+        map_cond_losses = f_pixel(map_locations).mean()
+
+        return avg_pm_loss, map_cond_losses
