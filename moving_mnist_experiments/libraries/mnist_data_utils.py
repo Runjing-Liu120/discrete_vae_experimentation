@@ -88,11 +88,13 @@ def pixel_1d_to_2d(sout, padding, pixel_1d):
 
     return pixel_2d + padding
 
-def pad_image(image, pixel_2d, sout):
+def pad_image(image, pixel_2d, sout = None, grid_out = None):
     # image is the input image
     # pixel 2d are the coordinates, from 0 to sout
     # first coordinate is x, second coordinate is y
     # sout is the side length of the output image
+
+    # grid_out is the meshgrid of dimension sout x sout
 
     # image should be N x 1 x slen x slen
     assert len(image.shape) == 4
@@ -104,9 +106,12 @@ def pad_image(image, pixel_2d, sout):
     batchsize = image.shape[0]
     sin = image.shape[-1]
 
-    r0 = (sout - 1) / 2
-    # TODO: cache this
-    grid_out = torch.FloatTensor(np.mgrid[0:sout, 0:sout].transpose() - r0)
+    if grid_out is None:
+        assert sout is not None
+        r0 = (sout - 1) / 2
+        grid_out = torch.FloatTensor(np.mgrid[0:sout, 0:sout].transpose() - r0)
+    else:
+        sout = grid_out.shape[0]
 
     grid1 = grid_out.unsqueeze(0).expand([pixel_2d.size(0), -1, -1, -1])
 
@@ -118,7 +123,7 @@ def pad_image(image, pixel_2d, sout):
 
     return padded
 
-def crop_image(image, pixel_2d, sin):
+def crop_image(image, pixel_2d, sin = None, grid0 = None):
     # image should be N x 1 x slen x slen
     assert len(image.shape) == 4
     assert image.shape[1] == 1
@@ -128,10 +133,11 @@ def crop_image(image, pixel_2d, sin):
 
     batchsize, _, h, _ = image.shape
 
-    r = sin // 2
-
-    # TODO: this can be cached, too
-    grid0 = torch.from_numpy(np.mgrid[(-r):(r+1), (-r):(r+1)].transpose([2, 1, 0]))
+    if grid0 is None:
+        assert sin is not None
+        r = sin // 2
+        grid0 = torch.from_numpy(\
+                    np.mgrid[(-r):(r+1), (-r):(r+1)].transpose([2, 1, 0]))
 
     grid1 = grid0.unsqueeze(0).expand([image.size(0), -1, -1, -1])
     grid2 = grid1 + pixel_2d.view(image.size(0), 1, 1, 2) - (h - 1) / 2
@@ -186,6 +192,10 @@ class MovingMNISTDataSet(Dataset):
         unif_probs = torch.ones(self.n_pixel_1d) / self.n_pixel_1d
         unif_probs = unif_probs.view(-1, self.n_pixel_1d)
         self.categorical = Categorical(unif_probs)
+        # for padding the image, we cache this grid
+        r0 = (slen - 1) / 2
+        self.grid_out = \
+            torch.FloatTensor(np.mgrid[0:slen, 0:slen].transpose() - r0)
 
     def __len__(self):
         return self.num_images
@@ -199,7 +209,7 @@ class MovingMNISTDataSet(Dataset):
         # get translated image
         image = self.mnist_data_set[self.sample_indx[idx]][0]
         image = image.view(1, 1, self.mnist_slen, self.mnist_slen)
-        image_translated = pad_image(image, pixel_2d, self.slen)
+        image_translated = pad_image(image, pixel_2d, grid_out = self.grid_out)
 
         label = self.mnist_data_set[self.sample_indx[idx]][1].squeeze()
 

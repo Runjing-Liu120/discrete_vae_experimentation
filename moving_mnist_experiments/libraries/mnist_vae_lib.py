@@ -162,6 +162,17 @@ class MovingHandwritingVAE(nn.Module):
 
         self.pixel_attention = PixelAttention(slen = self.full_slen)
 
+        # cache meshgrid required for padding images
+        r0 = (self.full_slen - 1) / 2
+        self.grid_out = \
+            torch.FloatTensor(
+                np.mgrid[0:self.full_slen, 0:self.full_slen].transpose() - r0)
+
+        # cache meshgrid required for cropping image
+        r = self.mnist_slen // 2
+        self.grid0 = torch.from_numpy(\
+                    np.mgrid[(-r):(r+1), (-r):(r+1)].transpose([2, 1, 0]))
+
     def forward(self, image):
         # image should be N x slen x slen
         assert len(image.shape) == 4
@@ -183,7 +194,7 @@ class MovingHandwritingVAE(nn.Module):
                                     pixel_1d = pixel_1d_sample)
 
         image_cropped = mnist_data_utils.crop_image(image,
-                            pixel_2d_sample, self.mnist_slen)
+                            pixel_2d_sample, grid0 = self.grid0)
 
         # pass through mnist vae
         recon_mean_cropped, latent_mean, latent_log_std, latent_samples = \
@@ -193,7 +204,7 @@ class MovingHandwritingVAE(nn.Module):
         recon_mean = \
             mnist_data_utils.pad_image(recon_mean_cropped,
                                         pixel_2d_sample,
-                                        self.full_slen)
+                                        grid_out = self.grid_out)
 
         return recon_mean, latent_mean, latent_log_std, latent_samples, \
                     pixel_probs, pixel_1d_sample
