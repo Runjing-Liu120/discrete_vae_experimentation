@@ -94,8 +94,9 @@ def pad_image(image, pixel_2d, sout):
     # first coordinate is x, second coordinate is y
     # sout is the side length of the output image
 
-    # image should be N x slen x slen
-    assert len(image.shape) == 3
+    # image should be N x 1 x slen x slen
+    assert len(image.shape) == 4
+    assert image.shape[1] == 1
 
     # assert there is a coordinate for each image
     assert image.shape[0] == pixel_2d.shape[0]
@@ -113,14 +114,14 @@ def pad_image(image, pixel_2d, sout):
     grid3 = (grid2.float() + (sout // 2)) / (sin // 2)
 
     # grid sample only works with 4D inputs
-    image_ = image.view(batchsize, 1, sin, sin)
-    padded = f.grid_sample(image_, grid3)
+    padded = f.grid_sample(image, grid3)
 
     return padded.squeeze()
 
 def crop_image(image, pixel_2d, sin):
-    # image should be N x slen x slen
-    assert len(image.shape) == 3
+    # image should be N x 1 x slen x slen
+    assert len(image.shape) == 4
+    assert image.shape[1] == 1
 
     # assert there is a coordinate for each image
     assert image.shape[0] == pixel_2d.shape[0]
@@ -136,10 +137,7 @@ def crop_image(image, pixel_2d, sin):
     grid2 = grid1 + pixel_2d.view(image.size(0), 1, 1, 2) - (h - 1) / 2
     grid3 = grid2.float() / ((h - 1) / 2)
 
-    # grid sample only works with 4D inputs
-    image_ = image.view(batchsize, 1, h, h)
-
-    return f.grid_sample(image_, grid3).squeeze()
+    return f.grid_sample(image, grid3).squeeze()
 
 
 class MovingMNISTDataSet(Dataset):

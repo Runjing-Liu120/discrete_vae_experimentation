@@ -164,14 +164,14 @@ class MovingHandwritingVAE(nn.Module):
 
     def forward(self, image):
         # image should be N x slen x slen
-        assert len(image.shape) == 3
+        assert len(image.shape) == 4
+        assert image.shape[0] == 1
         assert image.shape[1] == self.full_slen
         assert image.shape[2] == self.full_slen
 
         # the pixel where to attend.
         # the CNN requires a 4D input.
-        image_ = image.view(image.shape[0], -1, image.shape[-1], image.shape[-1])
-        pixel_probs = self.pixel_attention(image_)
+        pixel_probs = self.pixel_attention(image)
 
         # sample pixel
         categorical = Categorical(pixel_probs)
@@ -198,7 +198,7 @@ class MovingHandwritingVAE(nn.Module):
         return recon_mean, latent_mean, latent_log_std, latent_samples, \
                     pixel_probs, pixel_1d_sample
 
-    def get_loss(self, image, recon_mean, latent_mean, latent_log_std):
+    def get_loss(self, image):
 
         # kl term
         kl_q = modeling_lib.get_kl_q_standard_normal(latent_mean, latent_log_std)
@@ -207,72 +207,3 @@ class MovingHandwritingVAE(nn.Module):
         loglik = modeling_lib.get_bernoulli_loglik(recon_mean, image)
 
         return -loglik + kl_q
-
-
-def eval_vae(vae, loader, \
-                optimizer = None,
-                train = False):
-    if train:
-        vae.train()
-        assert optimizer is not None
-    else:
-        vae.eval()
-
-    avg_loss = 0.0
-
-    num_images = len(loader.dataset)
-
-    for batch_idx, data in enumerate(loader):
-
-        if optimizer is not None:
-            optimizer.zero_grad()
-
-        image = data['image'].to(device)
-
-        loss = vae.get_loss(image).sum()
-
-        if train:
-            loss.backward()
-            optimizer.step()
-
-        avg_loss += loss.data  / num_images
-
-    return avg_loss
-
-def train_vae(vae, train_loader, test_loader, optimizer,
-                    outfile = './mnist_vae_semisupervised',
-                    n_epoch = 200, print_every = 10, save_every = 20):
-
-    # get losses
-    train_loss = eval_vae(vae, train_loader, train = False)
-    test_loss = eval_vae(vae, test_loader, train = False)
-
-    print('  * init train recon loss: {:.10g};'.format(train_loss))
-    print('  * init test recon loss: {:.10g};'.format(test_loss))
-
-    for epoch in range(1, n_epoch + 1):
-        start_time = timeit.default_timer()
-
-        loss = eval_vae(vae, train_loader,
-                                optimizer = optimizer,
-                                train = True)
-
-        elapsed = timeit.default_timer() - start_time
-        print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
-                    epoch, loss, elapsed))
-
-        if epoch % print_every == 0:
-            train_loss = eval_vae(vae, train_loader, train = False)
-            test_loss = eval_vae(vae, test_loader, train = False)
-
-            print('  * train recon loss: {:.10g};'.format(train_loss))
-            print('  * test recon loss: {:.10g};'.format(test_loss))
-
-        if epoch % save_every == 0:
-            outfile_every = outfile + '_epoch' + str(epoch)
-            print("writing the parameters to " + outfile_every + '\n')
-            torch.save(vae.state_dict(), outfile_every)
-
-    outfile_final = outfile + '_final'
-    print("writing the parameters to " + outfile_final + '\n')
-    torch.save(vae.state_dict(), outfile_final)
