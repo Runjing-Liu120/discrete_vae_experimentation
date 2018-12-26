@@ -5,7 +5,10 @@ import torch.nn as nn
 
 import torch.optim as optim
 
+from torch.distributions import Categorical
+
 import modeling_lib
+import mnist_data_utils
 
 import timeit
 
@@ -56,9 +59,9 @@ class MLPDecoder(nn.Module):
         self.sigmoid = torch.nn.Sigmoid()
         self.tanh = torch.nn.Tanh()
 
-    def forward(self, latent_params):
+    def forward(self, latent_samples):
 
-        h = self.tanh(self.fc1(latent_params))
+        h = self.tanh(self.fc1(latent_samples))
         h = self.fc2(h)
 
         return self.sigmoid(h).view(-1, self.slen, self.slen)
@@ -76,24 +79,23 @@ class HandwritingVAE(nn.Module):
         self.decoder = MLPDecoder(self.latent_dim, self.slen)
 
     def forward(self, image):
-        # image should be N x slen x slen
-        assert len(image.shape) == 3
-        assert image.shape[1] == self.slen
-        assert image.shape[2] == self.slen
 
         # get latent means and std
         latent_mean, latent_log_std = self.encoder(image)
 
         # sample latent params
-        latent_params = torch.randn(latent_mean.shape).to(device) * \
+        latent_samples = torch.randn(latent_mean.shape).to(device) * \
                             torch.exp(latent_log_std) + latent_mean
 
         # pass through decoder
-        recon_mean = self.decoder(latent_params)
+        recon_mean = self.decoder(latent_samples)
 
-        return recon_mean, latent_mean, latent_log_std, latent_params
+        return recon_mean, latent_mean, latent_log_std, latent_samples
 
-    def get_loss(self, image, recon_mean, latent_mean, latent_log_std):
+    def get_loss(self, image):
+
+        recon_mean, latent_mean, latent_log_std, latent_samples = \
+            self.forward(image)
 
         # kl term
         kl_q = modeling_lib.get_kl_q_standard_normal(latent_mean, latent_log_std)
@@ -131,7 +133,7 @@ class PixelAttention(nn.Module):
 
         # one more fully connected layer
         self.slen = slen
-        self.fc1 = nn.Linear((self.slen - 4)**2, selfslen**2)
+        self.fc1 = nn.Linear((self.slen - 8)**2, self.slen**2)
 
         self.softmax = nn.Softmax(dim=1)
 
@@ -144,38 +146,57 @@ class PixelAttention(nn.Module):
 class MovingHandwritingVAE(nn.Module):
     def __init__(self, latent_dim = 5,
                         mnist_slen = 28,
-                        padded_slen = 68):
+                        full_slen = 68):
 
         super(MovingHandwritingVAE, self).__init__()
 
+        # mnist_slen is size of the mnist digit
+        # full_slen is the size of the padded image
+
         self.latent_dim = latent_dim
         self.mnist_slen = mnist_slen
-        self.padded_slen = padded_slen
+        self.full_slen = full_slen
 
         self.mnist_vae = HandwritingVAE(latent_dim = self.latent_dim,
-                                        slen = self.mnist_slen)
+                                        slen = self.mnist_slen + 1)
 
-        self.pixel_attention = PixelAttention(slen = padded_slen)
+        self.pixel_attention = PixelAttention(slen = self.full_slen)
 
     def forward(self, image):
         # image should be N x slen x slen
         assert len(image.shape) == 3
-        assert image.shape[1] == self.slen
-        assert image.shape[2] == self.slen
+        assert image.shape[1] == self.full_slen
+        assert image.shape[2] == self.full_slen
 
-        image_ 
+        # the pixel where to attend.
+        # the CNN requires a 4D input.
+        image_ = image.view(image.shape[0], -1, image.shape[-1], image.shape[-1])
+        pixel_probs = self.pixel_attention(image_)
 
-        # get latent means and std
-        latent_mean, latent_log_std = self.encoder(image)
+        # sample pixel
+        categorical = Categorical(pixel_probs)
+        pixel_1d_sample = categorical.sample().detach()
 
-        # sample latent params
-        latent_params = torch.randn(latent_mean.shape).to(device) * \
-                            torch.exp(latent_log_std) + latent_mean
+        # crop image about sampled pixel
+        pixel_2d_sample = mnist_data_utils.pixel_1d_to_2d(self.full_slen,
+                                    padding = 0,
+                                    pixel_1d = pixel_1d_sample)
 
-        # pass through decoder
-        recon_mean = self.decoder(latent_params)
+        image_cropped = mnist_data_utils.crop_image(image,
+                            pixel_2d_sample, self.mnist_slen)
 
-        return recon_mean, latent_mean, latent_log_std, latent_params
+        # pass through mnist vae
+        recon_mean_cropped, latent_mean, latent_log_std, latent_samples = \
+            self.mnist_vae(image_cropped)
+
+        # re-pad image
+        recon_mean = \
+            mnist_data_utils.pad_image(recon_mean_cropped,
+                                        pixel_2d_sample,
+                                        self.full_slen)
+
+        return recon_mean, latent_mean, latent_log_std, latent_samples, \
+                    pixel_probs, pixel_1d_sample
 
     def get_loss(self, image, recon_mean, latent_mean, latent_log_std):
 
@@ -208,11 +229,7 @@ def eval_vae(vae, loader, \
 
         image = data['image'].to(device)
 
-        recon_mean, latent_mean, latent_log_std, latent_params = \
-            vae.forward(image)
-
-        loss = vae.get_loss(image, recon_mean,
-                            latent_mean, latent_log_std).sum()
+        loss = vae.get_loss(image).sum()
 
         if train:
             loss.backward()
@@ -224,8 +241,7 @@ def eval_vae(vae, loader, \
 
 def train_vae(vae, train_loader, test_loader, optimizer,
                     outfile = './mnist_vae_semisupervised',
-                    n_epoch = 200, print_every = 10, save_every = 20,
-                    weight_decay = 1e-6, lr = 0.001):
+                    n_epoch = 200, print_every = 10, save_every = 20):
 
     # get losses
     train_loss = eval_vae(vae, train_loader, train = False)

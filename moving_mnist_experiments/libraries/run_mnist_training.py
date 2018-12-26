@@ -71,6 +71,11 @@ print('setting up VAE: ')
 vae = mnist_vae_lib.HandwritingVAE()
 vae.to(device)
 
+# set up optimizer
+optimizer = optim.Adam([
+                {'params': vae.parameters(),
+                'lr': args.learning_rate,
+                'weight_decay': args.weight_decay}])
 
 # TRAIN!
 print('training vae')
@@ -79,13 +84,11 @@ t0_train = time.time()
 
 outfile = os.path.join(args.outdir, args.outfilename)
 
-vae.train_vae(train_loader, test_loader,
+train_vae(vae, train_loader, test_loader, optimizer, 
                 outfile = outfile,
                 n_epoch = args.epochs,
                 print_every = 10,
-                save_every = args.save_every,
-                weight_decay = args.weight_decay,
-                lr = args.learning_rate)
+                save_every = args.save_every)
 
 
 print('done. Total time: {}secs'.format(time.time() - t0_train))

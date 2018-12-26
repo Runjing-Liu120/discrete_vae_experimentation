@@ -61,7 +61,7 @@ class MNISTDataSet(Dataset):
         return self.num_images
 
     def __getitem__(self, idx):
-        return {'image' : self.mnist_data_set[self.sample_indx[idx]][0].squeeze(),
+        return {'image' : self.mnist_data_set[self.sample_indx[idx]][0],
                 'label' : self.mnist_data_set[self.sample_indx[idx]][1].squeeze()}
 
 def get_mnist_dataset(data_dir = '../mnist_data/',
