@@ -166,12 +166,12 @@ class MovingHandwritingVAE(nn.Module):
         r0 = (self.full_slen - 1) / 2
         self.grid_out = \
             torch.FloatTensor(
-                np.mgrid[0:self.full_slen, 0:self.full_slen].transpose() - r0)
+                np.mgrid[0:self.full_slen, 0:self.full_slen].transpose() - r0).to(device)
 
         # cache meshgrid required for cropping image
         r = self.mnist_slen // 2
         self.grid0 = torch.from_numpy(\
-                    np.mgrid[(-r):(r+1), (-r):(r+1)].transpose([2, 1, 0]))
+                    np.mgrid[(-r):(r+1), (-r):(r+1)].transpose([2, 1, 0])).to(device)
 
     def forward(self, image):
         # image should be N x slen x slen
