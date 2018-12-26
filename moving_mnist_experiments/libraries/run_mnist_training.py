@@ -3,6 +3,7 @@ import os
 
 import torch
 print('torch version', torch.__version__)
+import torch.optim as optim
 
 import time
 
@@ -84,7 +85,7 @@ t0_train = time.time()
 
 outfile = os.path.join(args.outdir, args.outfilename)
 
-train_vae(vae, train_loader, test_loader, optimizer, 
+mnist_vae_lib.train_vae(vae, train_loader, test_loader, optimizer, 
                 outfile = outfile,
                 n_epoch = args.epochs,
                 print_every = 10,

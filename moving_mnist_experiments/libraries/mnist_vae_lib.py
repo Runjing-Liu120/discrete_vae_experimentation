@@ -64,7 +64,7 @@ class MLPDecoder(nn.Module):
         h = self.tanh(self.fc1(latent_samples))
         h = self.fc2(h)
 
-        return self.sigmoid(h).view(-1, self.slen, self.slen)
+        return self.sigmoid(h).view(-1, 1, self.slen, self.slen)
 
 class HandwritingVAE(nn.Module):
     def __init__(self, latent_dim = 5,
