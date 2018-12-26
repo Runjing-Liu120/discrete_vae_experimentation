@@ -28,7 +28,7 @@ parser.add_argument('--learning_rate', type = float, default = 0.001)
 parser.add_argument('--outdir', type = str,
                     default='./', help = 'directory for saving encoder and decoder')
 parser.add_argument('--outfilename', type = str,
-                    default='enc',
+                    default='moving_mnist_vae',
                     help = 'filename for saving the encoder and decoder')
 parser.add_argument('--save_every', type = int, default = 50,
                     help='save encoder ever how ___ epochs (default = 50)')
@@ -57,7 +57,8 @@ _ = torch.manual_seed(args.seed)
 # LOAD DATA
 data_dir = '../mnist_data/'
 propn_sample = args.propn_sample
-train_set, test_set = mnist_data_utils.get_mnist_dataset(data_dir, propn_sample)
+train_set, test_set = \
+    mnist_data_utils.get_moving_mnist_dataset(data_dir, propn_sample)
 
 train_loader = torch.utils.data.DataLoader(
                  dataset=train_set,
@@ -71,7 +72,7 @@ test_loader = torch.utils.data.DataLoader(
 
 # SET UP VAE
 print('setting up VAE: ')
-vae = mnist_vae_lib.HandwritingVAE()
+vae = mnist_vae_lib.MovingHandwritingVAE()
 vae.to(device)
 
 # set up optimizer
