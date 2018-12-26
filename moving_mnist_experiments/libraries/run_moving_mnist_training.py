@@ -11,6 +11,7 @@ import mnist_data_utils
 import mnist_vae_lib
 import vae_training_lib
 
+import distutils.util
 import argparse
 
 parser = argparse.ArgumentParser(description='VAE')
@@ -26,7 +27,7 @@ parser.add_argument('--learning_rate', type = float, default = 0.001)
 
 
 # whether to use true location
-parser.add_argument('--use_true_loc',
+parser.add_argument('--set_true_loc',
                     type=distutils.util.strtobool, default='False')
 
 # saving vae
@@ -94,7 +95,7 @@ t0_train = time.time()
 outfile = os.path.join(args.outdir, args.outfilename)
 
 vae_training_lib.train_vae(vae, train_loader, test_loader, optimizer,
-                use_true_loc = args.use_true_loc
+                set_true_loc = args.set_true_loc,
                 outfile = outfile,
                 n_epoch = args.epochs,
                 print_every = 10,

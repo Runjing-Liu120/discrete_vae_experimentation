@@ -1,6 +1,7 @@
 #!/bin/bash
 
 python ../libraries/run_moving_mnist_training.py \
+			--set_true_loc True \
 			--epochs 50 \
 			--seed 901 \
 			--outdir '../mnist_vae_results/'\
