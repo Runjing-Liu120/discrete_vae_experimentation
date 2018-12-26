@@ -13,7 +13,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def eval_vae(vae, loader, \
                 optimizer = None,
-                train = False):
+                train = False,
+                set_true_loc = False):
     if train:
         vae.train()
         assert optimizer is not None
@@ -30,8 +31,12 @@ def eval_vae(vae, loader, \
             optimizer.zero_grad()
 
         image = data['image'].to(device)
+        if set_true_loc:
+            true_pixel_2d = data['pixel_2d'].to(device)
+        else:
+            true_pixel_2d = None
 
-        loss = vae.get_loss(image).sum()
+        loss = vae.get_loss(image, true_pixel_2d = true_pixel_2d).sum()
 
         if train:
             loss.backward()
@@ -42,12 +47,15 @@ def eval_vae(vae, loader, \
     return avg_loss
 
 def train_vae(vae, train_loader, test_loader, optimizer,
+                    set_true_loc = False,
                     outfile = './mnist_vae_semisupervised',
                     n_epoch = 200, print_every = 10, save_every = 20):
 
     # get losses
-    train_loss = eval_vae(vae, train_loader, train = False)
-    test_loss = eval_vae(vae, test_loader, train = False)
+    train_loss = eval_vae(vae, train_loader, train = False,
+                            set_true_loc = set_true_loc)
+    test_loss = eval_vae(vae, test_loader, train = False,
+                            set_true_loc = set_true_loc)
 
     print('  * init train recon loss: {:.10g};'.format(train_loss))
     print('  * init test recon loss: {:.10g};'.format(test_loss))
@@ -57,15 +65,18 @@ def train_vae(vae, train_loader, test_loader, optimizer,
 
         loss = eval_vae(vae, train_loader,
                                 optimizer = optimizer,
-                                train = True)
+                                train = True,
+                                set_true_loc = set_true_loc)
 
         elapsed = timeit.default_timer() - start_time
         print('[{}] unlabeled_loss: {:.10g}  \t[{:.1f} seconds]'.format(\
                     epoch, loss, elapsed))
 
         if epoch % print_every == 0:
-            train_loss = eval_vae(vae, train_loader, train = False)
-            test_loss = eval_vae(vae, test_loader, train = False)
+            train_loss = eval_vae(vae, train_loader, train = False,
+                                    set_true_loc = set_true_loc)
+            test_loss = eval_vae(vae, test_loader, train = False,
+                                    set_true_loc = set_true_loc)
 
             print('  * train recon loss: {:.10g};'.format(train_loss))
             print('  * test recon loss: {:.10g};'.format(test_loss))

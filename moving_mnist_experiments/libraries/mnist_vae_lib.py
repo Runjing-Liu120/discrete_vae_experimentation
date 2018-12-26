@@ -162,6 +162,7 @@ class MovingHandwritingVAE(nn.Module):
 
         self.pixel_attention = PixelAttention(slen = self.full_slen)
 
+        # TODO check these grids
         # cache meshgrid required for padding images
         r0 = (self.full_slen - 1) / 2
         self.grid_out = \
@@ -173,48 +174,57 @@ class MovingHandwritingVAE(nn.Module):
         self.grid0 = torch.from_numpy(\
                     np.mgrid[(-r):(r+1), (-r):(r+1)].transpose([2, 1, 0]))
 
-    def forward(self, image):
+    def pad_image(self, image, pixel_2d):
+        return mnist_data_utils.pad_image(image,
+                                    pixel_2d,
+                                    grid_out = self.grid_out)
+
+    def crop_image(self, image, pixel_2d):
+        return mnist_data_utils.crop_image(image,
+                            pixel_2d, grid0 = self.grid0)
+
+    def forward(self, image, true_pixel_2d = None):
         # image should be N x slen x slen
         assert len(image.shape) == 4
         assert image.shape[1] == 1
         assert image.shape[2] == self.full_slen
         assert image.shape[3] == self.full_slen
 
-        # the pixel where to attend.
-        # the CNN requires a 4D input.
-        pixel_probs = self.pixel_attention(image)
+        if true_pixel_2d is None:
+            # the pixel where to attend.
+            # the CNN requires a 4D input.
+            pixel_probs = self.pixel_attention(image)
 
-        # sample pixel
-        categorical = Categorical(pixel_probs)
-        pixel_1d_sample = categorical.sample().detach()
+            # sample pixel
+            categorical = Categorical(pixel_probs)
+            pixel_1d_sample = categorical.sample().detach()
 
-        # crop image about sampled pixel
-        pixel_2d_sample = mnist_data_utils.pixel_1d_to_2d(self.full_slen,
-                                    padding = 0,
-                                    pixel_1d = pixel_1d_sample)
+            # crop image about sampled pixel
+            pixel_2d_sample = mnist_data_utils.pixel_1d_to_2d(self.full_slen,
+                                        padding = 0,
+                                        pixel_1d = pixel_1d_sample)
+        else:
+            assert true_pixel_2d.shape[0] == image.shape[0]
+            pixel_2d_sample = true_pixel_2d
+            pixel_probs = torch.Tensor([[1]]).to(device)
 
-        image_cropped = mnist_data_utils.crop_image(image,
-                            pixel_2d_sample, grid0 = self.grid0)
+        image_cropped = self.crop_image(image, pixel_2d_sample)
 
         # pass through mnist vae
         recon_mean_cropped, latent_mean, latent_log_std, latent_samples = \
             self.mnist_vae(image_cropped)
 
-        # re-pad image
-        recon_mean = \
-            mnist_data_utils.pad_image(recon_mean_cropped,
-                                        pixel_2d_sample,
-                                        grid_out = self.grid_out)
+        recon_mean = self.pad_image(recon_mean_cropped, pixel_2d_sample)
 
         return recon_mean, latent_mean, latent_log_std, latent_samples, \
-                    pixel_probs, pixel_1d_sample
+                    pixel_probs, pixel_2d_sample
 
-    def get_loss(self, image):
+    def get_loss(self, image, true_pixel_2d = None):
 
         # forward
         recon_mean, latent_mean, latent_log_std, latent_samples, \
-                    pixel_probs, pixel_1d_sample = \
-                        self.forward(image)
+                    pixel_probs, pixel_2d_sample = \
+                        self.forward(image, true_pixel_2d = true_pixel_2d)
 
         # kl term
         kl_latent = \

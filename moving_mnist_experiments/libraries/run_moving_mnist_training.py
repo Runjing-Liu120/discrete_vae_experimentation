@@ -24,7 +24,12 @@ parser.add_argument('--batch_size', type=int, default=64, metavar='N',
 parser.add_argument('--weight_decay', type = float, default = 1e-5)
 parser.add_argument('--learning_rate', type = float, default = 0.001)
 
-# saving encoder
+
+# whether to use true location
+parser.add_argument('--use_true_loc',
+                    type=distutils.util.strtobool, default='False')
+
+# saving vae
 parser.add_argument('--outdir', type = str,
                     default='./', help = 'directory for saving encoder and decoder')
 parser.add_argument('--outfilename', type = str,
@@ -89,6 +94,7 @@ t0_train = time.time()
 outfile = os.path.join(args.outdir, args.outfilename)
 
 vae_training_lib.train_vae(vae, train_loader, test_loader, optimizer,
+                use_true_loc = args.use_true_loc
                 outfile = outfile,
                 n_epoch = args.epochs,
                 print_every = 10,
