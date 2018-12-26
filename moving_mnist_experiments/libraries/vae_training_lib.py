@@ -9,6 +9,8 @@ from torch.distributions import Categorical
 
 import timeit
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 def eval_vae(vae, loader, \
                 optimizer = None,
                 train = False):

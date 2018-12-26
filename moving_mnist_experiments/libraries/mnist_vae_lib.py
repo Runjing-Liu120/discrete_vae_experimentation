@@ -165,9 +165,9 @@ class MovingHandwritingVAE(nn.Module):
     def forward(self, image):
         # image should be N x slen x slen
         assert len(image.shape) == 4
-        assert image.shape[0] == 1
-        assert image.shape[1] == self.full_slen
+        assert image.shape[1] == 1
         assert image.shape[2] == self.full_slen
+        assert image.shape[3] == self.full_slen
 
         # the pixel where to attend.
         # the CNN requires a 4D input.
@@ -200,10 +200,18 @@ class MovingHandwritingVAE(nn.Module):
 
     def get_loss(self, image):
 
+        # forward
+        recon_mean, latent_mean, latent_log_std, latent_samples, \
+                    pixel_probs, pixel_1d_sample = \
+                        self.forward(image)
+
         # kl term
-        kl_q = modeling_lib.get_kl_q_standard_normal(latent_mean, latent_log_std)
+        kl_latent = \
+            modeling_lib.get_kl_q_standard_normal(latent_mean, latent_log_std)
+        kl_pixel_probs = \
+            modeling_lib.get_multinomial_kl(pixel_probs)
 
         # bernoulli likelihood
         loglik = modeling_lib.get_bernoulli_loglik(recon_mean, image)
 
-        return -loglik + kl_q
+        return -loglik + kl_latent + kl_pixel_probs

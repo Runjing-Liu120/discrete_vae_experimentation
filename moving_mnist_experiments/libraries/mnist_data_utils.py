@@ -116,7 +116,7 @@ def pad_image(image, pixel_2d, sout):
     # grid sample only works with 4D inputs
     padded = f.grid_sample(image, grid3)
 
-    return padded.squeeze()
+    return padded
 
 def crop_image(image, pixel_2d, sin):
     # image should be N x 1 x slen x slen
@@ -126,7 +126,7 @@ def crop_image(image, pixel_2d, sin):
     # assert there is a coordinate for each image
     assert image.shape[0] == pixel_2d.shape[0]
 
-    batchsize, h, _ = image.shape
+    batchsize, _, h, _ = image.shape
 
     r = sin // 2
 
@@ -137,7 +137,7 @@ def crop_image(image, pixel_2d, sin):
     grid2 = grid1 + pixel_2d.view(image.size(0), 1, 1, 2) - (h - 1) / 2
     grid3 = grid2.float() / ((h - 1) / 2)
 
-    return f.grid_sample(image, grid3).squeeze()
+    return f.grid_sample(image, grid3)
 
 
 class MovingMNISTDataSet(Dataset):
@@ -174,6 +174,10 @@ class MovingMNISTDataSet(Dataset):
             self.sample_indx = indices
 
         # set up parameters for moving MNIST
+
+        # original mnist side length
+        self.mnist_slen = self.mnist_data_set[0][0].shape[-1]
+        # padded side-length
         self.slen = slen
         self.padding = padding
         # number of possible pixel locations
@@ -194,11 +198,12 @@ class MovingMNISTDataSet(Dataset):
 
         # get translated image
         image = self.mnist_data_set[self.sample_indx[idx]][0]
+        image = image.view(1, 1, self.mnist_slen, self.mnist_slen)
         image_translated = pad_image(image, pixel_2d, self.slen)
 
         label = self.mnist_data_set[self.sample_indx[idx]][1].squeeze()
 
-        return {'image' : image_translated,
+        return {'image' : image_translated.view(1, self.slen, self.slen),
                 'label' : label,
                 'pixel_2d': pixel_2d.squeeze()}
 
